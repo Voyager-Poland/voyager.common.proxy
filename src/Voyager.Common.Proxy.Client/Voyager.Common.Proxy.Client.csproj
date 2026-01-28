@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Voyager.Common.Results" Version="1.5.0" />
+    <PackageReference Include="Voyager.Common.Results" Version="1.6.0-preview.5" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
   </ItemGroup>
 
