@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy generation</Description>
+    <PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
+  </PropertyGroup>
+
+  <!-- No external dependencies - this is a pure abstractions library -->
+
+</Project>
