@@ -3,7 +3,12 @@
   <PropertyGroup>
     <Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy generation</Description>
     <PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <!-- No external dependencies - this is a pure abstractions library -->
 
