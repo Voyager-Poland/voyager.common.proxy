@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Override: Client uses DispatchProxy which is not available in .NET Framework -->
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <Description>HTTP client proxy generation for C# interfaces with Result&lt;T&gt; support</Description>
+    <PackageTags>http;proxy;rest;api;client;dispatchproxy</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voyager.Common.Proxy.Abstractions\Voyager.Common.Proxy.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Voyager.Common.Results" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
