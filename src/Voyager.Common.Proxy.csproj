@@ -1,10 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Automatic HTTP client/server proxy generation for C# interfaces with Result&lt;T&gt; support</Description>
+    <PackageTags>http;proxy;rest;api;client;server;result</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

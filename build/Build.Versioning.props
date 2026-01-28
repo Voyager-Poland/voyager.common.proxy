@@ -1,0 +1,29 @@
+<Project>
+  <!-- Versioning Configuration using MinVer -->
+
+  <PropertyGroup>
+    <!-- MinVer Configuration -->
+    <!-- MinVer automatically calculates version from Git tags -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerVerbosity>minimal</MinVerVerbosity>
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+
+    <!-- Preview builds for non-release branches/commits -->
+    <MinVerDefaultPreReleaseIdentifiers Condition="'$(GITHUB_REF_TYPE)' != 'tag'">preview</MinVerDefaultPreReleaseIdentifiers>
+
+    <!-- Assembly versioning strategy -->
+    <!-- AssemblyVersion: Major.0.0.0 (only major changes break binary compatibility) -->
+    <AssemblyVersion>$(MinVerMajor).0.0.0</AssemblyVersion>
+
+    <!-- FileVersion: Major.Minor.Patch.0 (full semantic version) -->
+    <FileVersion>$(MinVerMajor).$(MinVerMinor).$(MinVerPatch).0</FileVersion>
+  </PropertyGroup>
+
+  <!-- MinVer Package Reference -->
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
