@@ -1,10 +1,15 @@
 namespace Voyager.Common.Proxy.Server.AspNetCore;
 
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Voyager.Common.Proxy.Abstractions;
 using Voyager.Common.Proxy.Server.Core;
+using ProxyAllowAnonymous = Voyager.Common.Proxy.Abstractions.AllowAnonymousAttribute;
+using AspNetAllowAnonymous = Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute;
 
 /// <summary>
 /// Extension methods for mapping service proxy endpoints.
@@ -35,14 +40,27 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
     /// <param name="endpoints">The endpoint route builder.</param>
     /// <param name="configure">A delegate to configure endpoint conventions.</param>
     /// <returns>The endpoint route builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// // Apply authorization to all endpoints
+    /// app.MapServiceProxy&lt;IUserService&gt;(e => e.RequireAuthorization());
+    ///
+    /// // Apply specific policy
+    /// app.MapServiceProxy&lt;IAdminService&gt;(e => e.RequireAuthorization("AdminPolicy"));
+    /// </code>
+    /// </example>
     public static IEndpointRouteBuilder MapServiceProxy<TService>(
         this IEndpointRouteBuilder endpoints,
         Action<IEndpointConventionBuilder> configure)
         where TService : class
     {
+        var serviceType = typeof(TService);
         var scanner = new ServiceScanner();
         var descriptors = scanner.ScanInterface<TService>();
         var dispatcher = new RequestDispatcher();
+
+        // Get interface-level authorization attributes
+        var interfaceAuthAttributes = GetAuthorizationData(serviceType);
 
         foreach (var descriptor in descriptors)
         {
@@ -65,10 +83,107 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
                 descriptor.ReturnType,
                 descriptor.ResultValueType));
 
+            // Apply authorization from attributes
+            ApplyAuthorization(builder, descriptor.Method, interfaceAuthAttributes);
+
             configure(builder);
         }
 
         return endpoints;
+    }
+
+    private static void ApplyAuthorization(
+        IEndpointConventionBuilder builder,
+        MethodInfo method,
+        IReadOnlyList<IAuthorizeData> interfaceAuthAttributes)
+    {
+        // Check for AllowAnonymous on method (both our attribute and ASP.NET Core's)
+        var hasAllowAnonymous = method.GetCustomAttribute<ProxyAllowAnonymous>() != null ||
+                                method.GetCustomAttribute<AspNetAllowAnonymous>() != null;
+
+        if (hasAllowAnonymous)
+        {
+            builder.AllowAnonymous();
+            return;
+        }
+
+        // Get method-level authorization attributes
+        var methodAuthAttributes = GetAuthorizationData(method);
+
+        // If method has its own authorization, use that
+        if (methodAuthAttributes.Count > 0)
+        {
+            foreach (var authData in methodAuthAttributes)
+            {
+                ApplyAuthorizationData(builder, authData);
+            }
+            return;
+        }
+
+        // Otherwise, use interface-level authorization
+        if (interfaceAuthAttributes.Count > 0)
+        {
+            foreach (var authData in interfaceAuthAttributes)
+            {
+                ApplyAuthorizationData(builder, authData);
+            }
+        }
+    }
+
+    private static IReadOnlyList<IAuthorizeData> GetAuthorizationData(MemberInfo memberInfo)
+    {
+        var result = new List<IAuthorizeData>();
+
+        // Check for our RequireAuthorizationAttribute
+        foreach (var attr in memberInfo.GetCustomAttributes<RequireAuthorizationAttribute>())
+        {
+            result.Add(new AuthorizeDataAdapter(attr));
+        }
+
+        // Check for ASP.NET Core's AuthorizeAttribute
+        foreach (var attr in memberInfo.GetCustomAttributes<AuthorizeAttribute>())
+        {
+            result.Add(attr);
+        }
+
+        return result;
+    }
+
+    private static void ApplyAuthorizationData(IEndpointConventionBuilder builder, IAuthorizeData authData)
+    {
+        if (!string.IsNullOrEmpty(authData.Policy))
+        {
+            builder.RequireAuthorization(authData.Policy);
+        }
+        else if (!string.IsNullOrEmpty(authData.Roles) || !string.IsNullOrEmpty(authData.AuthenticationSchemes))
+        {
+            builder.RequireAuthorization(new AuthorizeAttribute
+            {
+                Roles = authData.Roles,
+                AuthenticationSchemes = authData.AuthenticationSchemes
+            });
+        }
+        else
+        {
+            builder.RequireAuthorization();
+        }
+    }
+
+    /// <summary>
+    /// Adapter to convert RequireAuthorizationAttribute to IAuthorizeData.
+    /// </summary>
+    private sealed class AuthorizeDataAdapter : IAuthorizeData
+    {
+        public string? Policy { get; set; }
+        public string? Roles { get; set; }
+        public string? AuthenticationSchemes { get; set; }
+
+        public AuthorizeDataAdapter(RequireAuthorizationAttribute attr)
+        {
+            Policy = attr.Policy;
+            Roles = attr.Roles;
+            AuthenticationSchemes = attr.AuthenticationSchemes;
+        }
     }
 }
 
@@ -85,7 +200,7 @@ public sealed class ServiceProxyEndpointMetadata
     /// <summary>
     /// Gets the method info.
     /// </summary>
-    public System.Reflection.MethodInfo Method { get; }
+    public MethodInfo Method { get; }
 
     /// <summary>
     /// Gets the return type.
@@ -99,7 +214,7 @@ public sealed class ServiceProxyEndpointMetadata
 
     internal ServiceProxyEndpointMetadata(
         Type serviceType,
-        System.Reflection.MethodInfo method,
+        MethodInfo method,
         Type returnType,
         Type? resultValueType)
     {

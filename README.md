@@ -173,6 +173,28 @@ public interface IUserService
 }
 ```
 
+## Authorization
+
+Add authorization to server endpoints using attributes or configuration:
+
+```csharp
+// Require auth for all methods in interface
+[RequireAuthorization]
+public interface IUserService
+{
+    Task<Result<User>> GetUserAsync(int id);
+
+    [RequireAuthorization("AdminPolicy")]  // Override with specific policy
+    Task<Result> DeleteUserAsync(int id);
+
+    [AllowAnonymous]  // Public endpoint
+    Task<Result<UserProfile>> GetPublicProfileAsync(int id);
+}
+
+// Or configure at mapping time
+app.MapServiceProxy<IUserService>(e => e.RequireAuthorization());
+```
+
 ## Package Details
 
 ### Abstractions
@@ -181,10 +203,13 @@ public interface IUserService
 dotnet add package Voyager.Common.Proxy.Abstractions
 ```
 
-Zero-dependency package providing optional HTTP attributes:
+Zero-dependency package providing optional attributes:
 
 - `[ServiceRoute("prefix")]` - Set base route for interface
 - `[HttpMethod(method, "template")]` - Override HTTP method and route
+- `[RequireAuthorization]` - Require authentication
+- `[RequireAuthorization("Policy")]` - Require specific policy
+- `[AllowAnonymous]` - Allow anonymous access (override interface-level auth)
 
 ### Client
 
