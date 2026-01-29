@@ -70,6 +70,16 @@ public class ServiceScannerTests
     {
         [HttpMethod(ProxyHttpMethod.Get, "get-payments/{IdBusMapCoach_RNo}")]
         Task<Result<PaymentsListResponse>> GetPaymentsListAsync(PaymentsListRequest paymentsListRequest);
+
+        // Complex type on GET without route params - properties from query string
+        Task<Result<PaymentsListResponse>> SearchPaymentsAsync(PaymentSearchRequest searchRequest);
+    }
+
+    public class PaymentSearchRequest
+    {
+        public int? CustomerId { get; set; }
+        public string? Status { get; set; }
+        public string? Language { get; set; }
     }
 
     public class PaymentsListRequest
@@ -277,6 +287,18 @@ public class ServiceScannerTests
         var getEndpoint = endpoints.First(e => e.Method.Name == "GetPaymentsListAsync");
         var requestParam = getEndpoint.Parameters.First(p => p.Name == "paymentsListRequest");
 
+        Assert.Equal(ParameterSource.RouteAndQuery, requestParam.Source);
+    }
+
+    [Fact]
+    public void ScanInterface_WithComplexTypeOnGetWithoutRouteParams_DetectsAsRouteAndQuery()
+    {
+        var endpoints = _scanner.ScanInterface<IPaymentService>();
+        var searchEndpoint = endpoints.First(e => e.Method.Name == "SearchPaymentsAsync");
+        var requestParam = searchEndpoint.Parameters.First(p => p.Name == "searchRequest");
+
+        // Complex types on GET should use RouteAndQuery even without route placeholders
+        // This allows binding properties from query string
         Assert.Equal(ParameterSource.RouteAndQuery, requestParam.Source);
     }
 

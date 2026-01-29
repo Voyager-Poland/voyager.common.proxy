@@ -514,5 +514,39 @@ public class ParameterBinderTests
         Assert.Null(request.Limit);
     }
 
+    public class SearchRequest
+    {
+        public int? CustomerId { get; set; }
+        public string? Status { get; set; }
+        public string? Language { get; set; }
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_QueryOnlyNoRouteValues_BindsAllFromQuery()
+    {
+        // Scenario: GET /search?CustomerId=42&Status=Active&Language=pl
+        // No route values, all properties from query string
+        var context = new TestRequestContext
+        {
+            RouteValues = new Dictionary<string, string>(), // empty
+            QueryParameters = new Dictionary<string, string>
+            {
+                ["CustomerId"] = "42",
+                ["Status"] = "Active",
+                ["Language"] = "pl"
+            }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(SearchRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<SearchRequest>(values[0]);
+        Assert.Equal(42, request.CustomerId);
+        Assert.Equal("Active", request.Status);
+        Assert.Equal("pl", request.Language);
+    }
+
     #endregion
 }
