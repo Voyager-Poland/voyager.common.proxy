@@ -1,10 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Override: Client uses DispatchProxy which is not available in .NET Framework -->
-    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net48;net6.0;net8.0</TargetFrameworks>
     <Description>HTTP client proxy generation for C# interfaces with Result&lt;T&gt; support</Description>
-    <PackageTags>http;proxy;rest;api;client;dispatchproxy</PackageTags>
+    <PackageTags>http;proxy;rest;api;client;dispatchproxy;castle</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
@@ -19,6 +18,14 @@
   <ItemGroup>
     <PackageReference Include="Voyager.Common.Results" Version="1.6.0-preview.5" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+  </ItemGroup>
+
+  <!-- .NET Framework 4.8 specific dependencies -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- Castle.DynamicProxy (no DispatchProxy in net48) -->
+    <PackageReference Include="Castle.Core" Version="5.1.1" />
+    <!-- System.Text.Json is not built-in for net48 -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
 </Project>

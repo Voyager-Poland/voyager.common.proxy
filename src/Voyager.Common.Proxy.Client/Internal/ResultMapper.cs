@@ -140,7 +140,7 @@ namespace Voyager.Common.Proxy.Client.Internal
                 HttpStatusCode.NotFound => Error.NotFoundError(message),
                 HttpStatusCode.Conflict => Error.ConflictError(message),
                 HttpStatusCode.RequestTimeout => Error.TimeoutError(message),
-                HttpStatusCode.TooManyRequests => Error.UnavailableError(message),
+                (HttpStatusCode)429 => Error.UnavailableError(message), // TooManyRequests (not in net48)
                 HttpStatusCode.ServiceUnavailable => Error.UnavailableError(message),
                 HttpStatusCode.GatewayTimeout => Error.TimeoutError(message),
                 _ when (int)statusCode >= 500 => Error.UnexpectedError(message),

@@ -15,20 +15,39 @@ namespace Voyager.Common.Proxy.Client
         /// <typeparam name="TService">The service interface type.</typeparam>
         /// <param name="services">The service collection.</param>
         /// <param name="configureOptions">Action to configure the proxy options.</param>
-        /// <returns>The service collection for chaining.</returns>
+        /// <returns>
+        /// An <see cref="IHttpClientBuilder"/> that can be used to configure the underlying HTTP client,
+        /// including adding message handlers for authentication, retry policies, etc.
+        /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="services"/> or <paramref name="configureOptions"/> is null.
         /// </exception>
         /// <example>
         /// <code>
+        /// // Basic usage
         /// services.AddServiceProxy&lt;IUserService&gt;(options =>
         /// {
         ///     options.BaseUrl = new Uri("https://api.example.com");
         ///     options.Timeout = TimeSpan.FromSeconds(30);
         /// });
+        ///
+        /// // With authentication handler
+        /// services.AddServiceProxy&lt;IUserService&gt;(options =>
+        /// {
+        ///     options.BaseUrl = new Uri("https://api.example.com");
+        /// })
+        /// .AddHttpMessageHandler&lt;AuthorizationHandler&gt;();
+        ///
+        /// // With Polly retry policy
+        /// services.AddServiceProxy&lt;IUserService&gt;(options =>
+        /// {
+        ///     options.BaseUrl = new Uri("https://api.example.com");
+        /// })
+        /// .AddHttpMessageHandler&lt;AuthorizationHandler&gt;()
+        /// .AddPolicyHandler(GetRetryPolicy());
         /// </code>
         /// </example>
-        public static IServiceCollection AddServiceProxy<TService>(
+        public static IHttpClientBuilder AddServiceProxy<TService>(
             this IServiceCollection services,
             Action<ServiceProxyOptions> configureOptions)
             where TService : class
@@ -55,16 +74,24 @@ namespace Voyager.Common.Proxy.Client
         /// <typeparam name="TService">The service interface type.</typeparam>
         /// <param name="services">The service collection.</param>
         /// <param name="baseUrl">The base URL of the service.</param>
-        /// <returns>The service collection for chaining.</returns>
+        /// <returns>
+        /// An <see cref="IHttpClientBuilder"/> that can be used to configure the underlying HTTP client,
+        /// including adding message handlers for authentication, retry policies, etc.
+        /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="services"/> or <paramref name="baseUrl"/> is null.
         /// </exception>
         /// <example>
         /// <code>
+        /// // Simple usage
         /// services.AddServiceProxy&lt;IUserService&gt;("https://api.example.com");
+        ///
+        /// // With authentication
+        /// services.AddServiceProxy&lt;IUserService&gt;("https://api.example.com")
+        ///     .AddHttpMessageHandler&lt;AuthorizationHandler&gt;();
         /// </code>
         /// </example>
-        public static IServiceCollection AddServiceProxy<TService>(
+        public static IHttpClientBuilder AddServiceProxy<TService>(
             this IServiceCollection services,
             string baseUrl)
             where TService : class
@@ -93,11 +120,14 @@ namespace Voyager.Common.Proxy.Client
         /// <typeparam name="TService">The service interface type.</typeparam>
         /// <param name="services">The service collection.</param>
         /// <param name="baseUrl">The base URI of the service.</param>
-        /// <returns>The service collection for chaining.</returns>
+        /// <returns>
+        /// An <see cref="IHttpClientBuilder"/> that can be used to configure the underlying HTTP client,
+        /// including adding message handlers for authentication, retry policies, etc.
+        /// </returns>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="services"/> or <paramref name="baseUrl"/> is null.
         /// </exception>
-        public static IServiceCollection AddServiceProxy<TService>(
+        public static IHttpClientBuilder AddServiceProxy<TService>(
             this IServiceCollection services,
             Uri baseUrl)
             where TService : class
@@ -120,7 +150,7 @@ namespace Voyager.Common.Proxy.Client
             return AddServiceProxyCore<TService>(services, options);
         }
 
-        private static IServiceCollection AddServiceProxyCore<TService>(
+        private static IHttpClientBuilder AddServiceProxyCore<TService>(
             IServiceCollection services,
             ServiceProxyOptions options)
             where TService : class
@@ -131,10 +161,10 @@ namespace Voyager.Common.Proxy.Client
                     $"BaseUrl must be configured for service proxy {typeof(TService).Name}.");
             }
 
-            var clientName = $"ServiceProxy_{typeof(TService).FullName}";
+            var clientName = GetHttpClientName<TService>();
 
             // Register HttpClient with HttpClientFactory
-            services.AddHttpClient(clientName, client =>
+            var httpClientBuilder = services.AddHttpClient(clientName, client =>
             {
                 client.BaseAddress = options.BaseUrl;
                 client.Timeout = options.Timeout;
@@ -149,7 +179,17 @@ namespace Voyager.Common.Proxy.Client
                 return ServiceProxy<TService>.Create(httpClient, options);
             });
 
-            return services;
+            return httpClientBuilder;
+        }
+
+        /// <summary>
+        /// Gets the HTTP client name for a service type.
+        /// </summary>
+        /// <typeparam name="TService">The service interface type.</typeparam>
+        /// <returns>The HTTP client name.</returns>
+        internal static string GetHttpClientName<TService>()
+        {
+            return $"ServiceProxy_{typeof(TService).FullName}";
         }
     }
 }

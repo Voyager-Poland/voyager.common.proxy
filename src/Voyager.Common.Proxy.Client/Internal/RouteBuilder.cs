@@ -6,7 +6,10 @@ namespace Voyager.Common.Proxy.Client.Internal
     using System.Reflection;
     using System.Text;
     using System.Text.RegularExpressions;
+    using System.Threading;
     using Voyager.Common.Proxy.Abstractions;
+
+    using ProxyHttpMethod = Voyager.Common.Proxy.Abstractions.HttpMethod;
 
     /// <summary>
     /// Builds HTTP routes from method metadata using conventions and attributes.
@@ -20,7 +23,7 @@ namespace Voyager.Common.Proxy.Client.Internal
         /// <summary>
         /// Gets the HTTP method for the given method info.
         /// </summary>
-        public static Abstractions.HttpMethod GetHttpMethod(MethodInfo method)
+        public static ProxyHttpMethod GetHttpMethod(MethodInfo method)
         {
             var attribute = method.GetCustomAttribute<HttpMethodAttribute>();
             if (attribute != null)
@@ -35,28 +38,28 @@ namespace Voyager.Common.Proxy.Client.Internal
                 name.StartsWith("Find", StringComparison.OrdinalIgnoreCase) ||
                 name.StartsWith("List", StringComparison.OrdinalIgnoreCase))
             {
-                return Abstractions.HttpMethod.Get;
+                return ProxyHttpMethod.Get;
             }
 
             if (name.StartsWith("Create", StringComparison.OrdinalIgnoreCase) ||
                 name.StartsWith("Add", StringComparison.OrdinalIgnoreCase))
             {
-                return Abstractions.HttpMethod.Post;
+                return ProxyHttpMethod.Post;
             }
 
             if (name.StartsWith("Update", StringComparison.OrdinalIgnoreCase))
             {
-                return Abstractions.HttpMethod.Put;
+                return ProxyHttpMethod.Put;
             }
 
             if (name.StartsWith("Delete", StringComparison.OrdinalIgnoreCase) ||
                 name.StartsWith("Remove", StringComparison.OrdinalIgnoreCase))
             {
-                return Abstractions.HttpMethod.Delete;
+                return ProxyHttpMethod.Delete;
             }
 
             // Default to POST
-            return Abstractions.HttpMethod.Post;
+            return ProxyHttpMethod.Post;
         }
 
         /// <summary>
@@ -153,9 +156,9 @@ namespace Voyager.Common.Proxy.Client.Internal
 
                 // Complex types become body (for POST, PUT, PATCH)
                 if (IsComplexType(param.ParameterType) &&
-                    (httpMethod == Abstractions.HttpMethod.Post ||
-                     httpMethod == Abstractions.HttpMethod.Put ||
-                     httpMethod == Abstractions.HttpMethod.Patch))
+                    (httpMethod == ProxyHttpMethod.Post ||
+                     httpMethod == ProxyHttpMethod.Put ||
+                     httpMethod == ProxyHttpMethod.Patch))
                 {
                     body = value;
                 }

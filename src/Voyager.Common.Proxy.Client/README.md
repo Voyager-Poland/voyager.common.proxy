@@ -34,6 +34,10 @@ services.AddServiceProxy<IUserService>(options =>
     options.BaseUrl = new Uri("https://api.example.com");
     options.Timeout = TimeSpan.FromSeconds(60);
 });
+
+// With authentication handler
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddHttpMessageHandler<AuthorizationHandler>();
 ```
 
 ### 3. Use the service
@@ -145,6 +149,65 @@ IUserService userService = ServiceProxy<IUserService>.Create(httpClient, options
 var result = await userService.GetUserAsync(123);
 ```
 
+## Authentication
+
+`AddServiceProxy` returns `IHttpClientBuilder`, allowing you to add authentication handlers:
+
+```csharp
+// 1. Create an authorization handler
+public class AuthorizationHandler : DelegatingHandler
+{
+    private readonly ITokenProvider _tokenProvider;
+
+    public AuthorizationHandler(ITokenProvider tokenProvider)
+    {
+        _tokenProvider = tokenProvider;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var token = await _tokenProvider.GetTokenAsync(cancellationToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await base.SendAsync(request, cancellationToken);
+    }
+}
+
+// 2. Register handler and proxy
+services.AddTransient<AuthorizationHandler>();
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddHttpMessageHandler<AuthorizationHandler>();
+```
+
+## Polly Integration
+
+Add resilience policies using [Microsoft.Extensions.Http.Polly](https://www.nuget.org/packages/Microsoft.Extensions.Http.Polly):
+
+```csharp
+// Install: dotnet add package Microsoft.Extensions.Http.Polly
+
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddHttpMessageHandler<AuthorizationHandler>()
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(3, retryAttempt =>
+            TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+}
+
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
+}
+```
+
 ## JSON Serialization
 
 By default, the proxy uses `System.Text.Json` with camelCase naming. You can customize this:
@@ -184,16 +247,22 @@ public interface IOrderService
 
 ## Supported Frameworks
 
-- .NET Framework 4.8
-- .NET 6.0
-- .NET 8.0
+- .NET Framework 4.8 (via Castle.DynamicProxy)
+- .NET 6.0 (via DispatchProxy)
+- .NET 8.0 (via DispatchProxy)
 
 ## Dependencies
 
-- `Voyager.Common.Proxy.Abstractions` - Optional attributes
+**Required:**
+- `Voyager.Common.Proxy.Abstractions` - HTTP attributes
 - `Voyager.Common.Results` - Result pattern
 - `Microsoft.Extensions.Http` - HttpClientFactory
-- `Microsoft.Extensions.DependencyInjection.Abstractions` - DI abstractions
+
+**net48 only:**
+- `Castle.Core` - Dynamic proxy generation
+
+**Optional:**
+- `Microsoft.Extensions.Http.Polly` - Retry policies, circuit breakers
 
 ## Related Packages
 
