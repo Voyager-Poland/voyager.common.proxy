@@ -115,6 +115,12 @@ public class ParameterBinder
             if (context.Body.CanSeek)
             {
                 context.Body.Position = 0;
+
+                // Check if stream is empty
+                if (context.Body.Length == 0)
+                {
+                    return param.IsOptional ? param.DefaultValue : null;
+                }
             }
 
             var result = await JsonSerializer.DeserializeAsync(context.Body, param.Type, JsonOptions, context.CancellationToken);
@@ -126,10 +132,23 @@ public class ParameterBinder
 
             return result;
         }
+        catch (JsonException ex) when (IsEmptyStreamException(ex))
+        {
+            // Empty stream - return null or default
+            return param.IsOptional ? param.DefaultValue : null;
+        }
         catch (JsonException)
         {
             throw new ArgumentException($"Failed to deserialize request body to type '{param.Type.Name}'.");
         }
+    }
+
+    private static bool IsEmptyStreamException(JsonException ex)
+    {
+        // JsonSerializer throws specific messages for empty input
+        return ex.Message.Contains("input does not contain any JSON tokens") ||
+               ex.Message.Contains("The input does not contain any JSON tokens") ||
+               ex.BytePositionInLine == 0 && ex.LineNumber == 0;
     }
 
     private static object? ConvertValue(string value, Type targetType)
