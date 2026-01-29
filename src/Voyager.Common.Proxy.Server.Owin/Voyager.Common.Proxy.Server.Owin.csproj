@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Override Directory.Build.props TargetFrameworks -->
+    <TargetFrameworks>net48</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>OWIN integration for Voyager.Common.Proxy.Server - automatically generates HTTP endpoints from service interfaces for .NET Framework 4.8. Uses raw OWIN delegate signatures for maximum compatibility.</Description>
+    <PackageTags>proxy;http;server;owin;rest;api;endpoints;netframework</PackageTags>
+  </PropertyGroup>
+
+  <!-- No OWIN package dependencies - uses raw OWIN delegate signatures -->
+  <!-- IDictionary<string,object> environment and Func<..., Task> are framework types -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Core\Voyager.Common.Proxy.Server.Core.csproj" />
+  </ItemGroup>
+
+</Project>
