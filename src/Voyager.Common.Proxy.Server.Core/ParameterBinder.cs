@@ -99,7 +99,7 @@ public class ParameterBinder
 
     private static async Task<object?> BindFromBodyAsync(IRequestContext context, ParameterDescriptor param)
     {
-        if (context.Body == null || context.Body.Length == 0)
+        if (context.Body == null)
         {
             if (param.IsOptional)
             {
@@ -117,7 +117,14 @@ public class ParameterBinder
                 context.Body.Position = 0;
             }
 
-            return await JsonSerializer.DeserializeAsync(context.Body, param.Type, JsonOptions, context.CancellationToken);
+            var result = await JsonSerializer.DeserializeAsync(context.Body, param.Type, JsonOptions, context.CancellationToken);
+
+            if (result == null && param.IsOptional)
+            {
+                return param.DefaultValue;
+            }
+
+            return result;
         }
         catch (JsonException)
         {
