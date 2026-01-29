@@ -310,4 +310,4 @@ Dla logiki wykonywanej **po** standardowych targets:
 **Powiązane dokumenty:**
 - [MSBuild Directory.Build.props](https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-your-build)
 - [ADR-001: Przejście na MinVer](../../Voyager.Common.Results/docs/adr/ADR-001-MinVer-Git-Based-Versioning.md)
-- [Voyager.Common.Results build/](https://github.com/voyager-poland/Voyager.Common.Results/tree/main/build)
+- [Voyager.Common.Results build/](https://github.com/Voyager-Poland/Voyager.Common.Results/tree/main/build)

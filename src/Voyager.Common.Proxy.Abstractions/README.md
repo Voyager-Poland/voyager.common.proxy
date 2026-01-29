@@ -1,6 +1,6 @@
 # Voyager.Common.Proxy.Abstractions
 
-Zero-dependency abstractions library providing optional HTTP attributes for [Voyager.Common.Proxy](https://github.com/voyager-poland/Voyager.Common.Proxy).
+Zero-dependency abstractions library providing optional HTTP attributes for [Voyager.Common.Proxy](https://github.com/Voyager-Poland/voyager.common.proxy).
 
 ## Installation
 
@@ -163,4 +163,4 @@ All template parameters are optional - when omitted, routes are derived from met
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/voyager-poland/Voyager.Common.Proxy/blob/main/LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/Voyager-Poland/voyager.common.proxy/blob/main/LICENSE) for details.

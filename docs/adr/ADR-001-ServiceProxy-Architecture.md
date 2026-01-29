@@ -432,6 +432,6 @@ Voyager.Common.Proxy.Server
 ---
 
 **Powiązane dokumenty:**
-- [Voyager.Common.Results](https://github.com/voyager-poland/Voyager.Common.Results)
+- [Voyager.Common.Results](https://github.com/Voyager-Poland/Voyager.Common.Results)
 - [Microsoft Minimal APIs](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis)
 - [DispatchProxy Class](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.dispatchproxy)

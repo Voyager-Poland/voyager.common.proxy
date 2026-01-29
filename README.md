@@ -317,3 +317,5 @@ dotnet pack
 ## License
 
 MIT License - Copyright (c) Sindbad IT Sp. z o.o.
+
+See [LICENSE](https://github.com/Voyager-Poland/voyager.common.proxy/blob/main/LICENSE) for details.

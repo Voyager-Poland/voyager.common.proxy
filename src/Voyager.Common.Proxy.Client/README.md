@@ -272,4 +272,4 @@ public interface IOrderService
 
 ## License
 
-MIT License - see [LICENSE](https://github.com/voyager-poland/Voyager.Common.Proxy/blob/main/LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/Voyager-Poland/voyager.common.proxy/blob/main/LICENSE) for details.
