@@ -7,11 +7,6 @@
     <Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy generation</Description>
     <PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Explicit version to avoid MinVer issues with multi-targeting -->
-    <MinVerSkip>true</MinVerSkip>
-    <Version>1.0.0-preview</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

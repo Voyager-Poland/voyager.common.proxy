@@ -10,11 +10,6 @@
     <Description>Abstractions for Voyager.Common.Proxy.Server - interfaces and contracts for building HTTP endpoints from service interfaces.</Description>
     <PackageTags>proxy;http;server;abstractions;rest;api</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Disable MinVer - use explicit version -->
-    <MinVerSkip>true</MinVerSkip>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -10,11 +10,6 @@
     <Description>Core logic for Voyager.Common.Proxy.Server - service scanning, endpoint metadata building, and request dispatching.</Description>
     <PackageTags>proxy;http;server;core;rest;api</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Disable MinVer - use explicit version -->
-    <MinVerSkip>true</MinVerSkip>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
     <!-- Suppress compatibility warning for netstandard2.0 -->
     <NoWarn>$(NoWarn);NU1702</NoWarn>
   </PropertyGroup>
