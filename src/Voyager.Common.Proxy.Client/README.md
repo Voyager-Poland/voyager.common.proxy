@@ -151,15 +151,54 @@ var result = await userService.GetUserAsync(123);
 
 ## Authentication
 
-`AddServiceProxy` returns `IHttpClientBuilder`, allowing you to add authentication handlers:
+`AddServiceProxy` returns `IHttpClientBuilder`, allowing you to add authentication handlers via `AddHttpMessageHandler<T>()`.
+
+### ASP.NET Core - Forward Current User's Token
+
+Forward the Bearer token from incoming request to outgoing service calls:
 
 ```csharp
-// 1. Create an authorization handler
-public class AuthorizationHandler : DelegatingHandler
+public class ForwardAuthorizationHandler : DelegatingHandler
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public ForwardAuthorizationHandler(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var authHeader = _httpContextAccessor.HttpContext?.Request.Headers["Authorization"].FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(authHeader))
+        {
+            request.Headers.TryAddWithoutValidation("Authorization", authHeader);
+        }
+
+        return await base.SendAsync(request, cancellationToken);
+    }
+}
+
+// Registration in Program.cs
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<ForwardAuthorizationHandler>();
+builder.Services.AddServiceProxy<IPaymentService>("https://api.internal.com")
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>();
+```
+
+### ASP.NET Core - Custom Token Provider
+
+Use a token provider for service-to-service authentication (client credentials):
+
+```csharp
+public class ServiceAuthorizationHandler : DelegatingHandler
 {
     private readonly ITokenProvider _tokenProvider;
 
-    public AuthorizationHandler(ITokenProvider tokenProvider)
+    public ServiceAuthorizationHandler(ITokenProvider tokenProvider)
     {
         _tokenProvider = tokenProvider;
     }
@@ -174,10 +213,129 @@ public class AuthorizationHandler : DelegatingHandler
     }
 }
 
-// 2. Register handler and proxy
-services.AddTransient<AuthorizationHandler>();
+// Registration
+services.AddSingleton<ITokenProvider, ClientCredentialsTokenProvider>();
+services.AddTransient<ServiceAuthorizationHandler>();
 services.AddServiceProxy<IUserService>("https://api.example.com")
-    .AddHttpMessageHandler<AuthorizationHandler>();
+    .AddHttpMessageHandler<ServiceAuthorizationHandler>();
+```
+
+### OWIN / .NET Framework 4.8
+
+In OWIN applications, use `HttpContext.Current` to access the incoming request:
+
+```csharp
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Web;
+
+public class OwinForwardAuthorizationHandler : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        // Forward Authorization header from incoming request
+        var incomingAuth = HttpContext.Current?.Request?.Headers["Authorization"];
+
+        if (!string.IsNullOrEmpty(incomingAuth))
+        {
+            request.Headers.TryAddWithoutValidation("Authorization", incomingAuth);
+        }
+
+        return await base.SendAsync(request, cancellationToken);
+    }
+}
+
+// Registration in Startup.cs
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var services = new ServiceCollection();
+
+        services.AddTransient<OwinForwardAuthorizationHandler>();
+        services.AddServiceProxy<IPaymentService>("https://api.internal.com")
+            .AddHttpMessageHandler<OwinForwardAuthorizationHandler>();
+
+        // Build and use ServiceProvider...
+    }
+}
+```
+
+### OWIN - Token from Claims
+
+Extract token stored in user claims:
+
+```csharp
+public class OwinClaimsAuthorizationHandler : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        // Get token from OWIN context
+        var owinContext = HttpContext.Current?.GetOwinContext();
+        var claimsPrincipal = owinContext?.Authentication?.User;
+
+        // Token stored in claims (e.g., during OAuth authentication)
+        var token = claimsPrincipal?.FindFirst("access_token")?.Value
+                 ?? claimsPrincipal?.FindFirst("id_token")?.Value;
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        return await base.SendAsync(request, cancellationToken);
+    }
+}
+```
+
+### OWIN - Custom Token Provider with Caching
+
+For service-to-service calls with token caching:
+
+```csharp
+public class OwinServiceAuthorizationHandler : DelegatingHandler
+{
+    private readonly ITokenProvider _tokenProvider;
+    private string _cachedToken;
+    private DateTime _tokenExpiry;
+
+    public OwinServiceAuthorizationHandler(ITokenProvider tokenProvider)
+    {
+        _tokenProvider = tokenProvider;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(_cachedToken) || DateTime.UtcNow >= _tokenExpiry)
+        {
+            var tokenResult = await _tokenProvider.GetTokenAsync(cancellationToken);
+            _cachedToken = tokenResult.Token;
+            _tokenExpiry = tokenResult.ExpiresAt.AddMinutes(-5); // Refresh 5 min early
+        }
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _cachedToken);
+        return await base.SendAsync(request, cancellationToken);
+    }
+}
+```
+
+### Multiple Handlers
+
+Chain multiple handlers for complex scenarios:
+
+```csharp
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddHttpMessageHandler<LoggingHandler>()           // 1. Log request/response
+    .AddHttpMessageHandler<ForwardAuthorizationHandler>() // 2. Add auth header
+    .AddHttpMessageHandler<CorrelationIdHandler>();    // 3. Add correlation ID
 ```
 
 ## Polly Integration
