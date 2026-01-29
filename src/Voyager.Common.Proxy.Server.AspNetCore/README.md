@@ -51,6 +51,106 @@ This generates the following endpoints:
 - **Authorization support** - attribute-based and configuration-based
 - **Minimal API integration** - uses ASP.NET Core's endpoint routing
 
+## Parameter Binding
+
+The library automatically determines where to bind each parameter based on its type, HTTP method, and route template.
+
+### Binding Sources
+
+| Parameter Source | When Used | Example |
+|------------------|-----------|---------|
+| **Route** | Parameter name matches `{placeholder}` in route | `/users/{id}` |
+| **Query** | Simple types (int, string, Guid, enum, etc.) | `?name=John&limit=10` |
+| **Body** | Complex types on POST, PUT, PATCH | JSON request body |
+| **Route + Query** | Complex types on GET with route placeholders | Mixed binding |
+| **Injected** | `CancellationToken` | From `HttpContext.RequestAborted` |
+
+### Simple Types from Query String
+
+```csharp
+Task<Result<List<User>>> SearchUsersAsync(string? name, int? limit, bool? active);
+// GET /user-service/search-users?name=John&limit=10&active=true
+```
+
+### Route Parameters
+
+When parameter name matches a route placeholder:
+
+```csharp
+[HttpMethod(HttpMethod.Get, "{id}")]
+Task<Result<User>> GetUserAsync(int id);
+// GET /user-service/123  →  id = 123
+```
+
+### Request Body (POST, PUT, PATCH)
+
+Complex types are deserialized from JSON:
+
+```csharp
+Task<Result<User>> CreateUserAsync(CreateUserRequest request);
+// POST /user-service/create-user
+// Content-Type: application/json
+// Body: { "name": "John", "email": "john@example.com" }
+```
+
+### Mixed Binding (Route + Query)
+
+For GET requests with complex type parameters and route placeholders, properties are bound from both sources. **Route values take precedence** over query parameters.
+
+```csharp
+public class PaymentsListRequest
+{
+    public int IdBusMapCoach_RNo { get; set; }  // Bound from route
+    public string? Status { get; set; }         // Bound from query
+    public int? Limit { get; set; }             // Bound from query
+    public DateTime? FromDate { get; set; }     // Bound from query
+}
+
+[HttpMethod(HttpMethod.Get, "payments/{IdBusMapCoach_RNo}")]
+Task<Result<PaymentsList>> GetPaymentsAsync(PaymentsListRequest request);
+
+// Request: GET /service/payments/123?Status=Active&Limit=10&FromDate=2024-01-01
+//
+// Binding result:
+//   request.IdBusMapCoach_RNo = 123       ← from route {IdBusMapCoach_RNo}
+//   request.Status = "Active"              ← from query string
+//   request.Limit = 10                     ← from query string
+//   request.FromDate = 2024-01-01          ← from query string
+```
+
+This enables RESTful URL design while passing multiple filter parameters:
+
+```csharp
+public class OrderFilterRequest
+{
+    public int CustomerId { get; set; }        // From route
+    public string? Status { get; set; }        // From query
+    public DateTime? Since { get; set; }       // From query
+    public int Page { get; set; } = 1;         // From query (with default)
+    public int PageSize { get; set; } = 20;    // From query (with default)
+}
+
+[HttpMethod(HttpMethod.Get, "customers/{CustomerId}/orders")]
+Task<Result<PagedList<Order>>> GetCustomerOrdersAsync(OrderFilterRequest filter);
+
+// GET /service/customers/42/orders?Status=Pending&Page=2&PageSize=50
+```
+
+### Supported Types for Route/Query Binding
+
+| Type | Example Values |
+|------|----------------|
+| `int`, `long`, `short`, `byte` | `123`, `-456` |
+| `float`, `double`, `decimal` | `19.99`, `3.14159` |
+| `bool` | `true`, `false` |
+| `string` | `hello`, `John%20Doe` (URL encoded) |
+| `Guid` | `550e8400-e29b-41d4-a716-446655440000` |
+| `DateTime` | `2024-01-15`, `2024-01-15T10:30:00` |
+| `DateTimeOffset` | `2024-01-15T10:30:00+02:00` |
+| `TimeSpan` | `01:30:00`, `1.12:00:00` |
+| Enums | `Active`, `PENDING` (case-insensitive) |
+| Nullable versions | `int?`, `bool?`, `DateTime?`, etc. |
+
 ## Authorization
 
 ### Option 1: Attribute on Interface (all endpoints)

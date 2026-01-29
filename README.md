@@ -133,12 +133,79 @@ Routes are generated from interface and method names using kebab-case:
 
 ### Parameter Binding
 
-| Parameter Type | Location |
-|----------------|----------|
-| Simple types (int, string, Guid, etc.) | Query string |
-| Complex types (classes, records) | Request body (POST, PUT, PATCH) |
-| Route template parameters `{id}` | URL path |
-| `CancellationToken` | Injected from request |
+The library automatically determines where to bind each parameter based on its type, HTTP method, and route template.
+
+#### Binding Rules
+
+| Scenario | Source | Example |
+|----------|--------|---------|
+| Simple type (int, string, Guid, bool, enum, etc.) | Query string | `?id=123` |
+| Simple type matching route placeholder | URL path | `/users/{id}` → `/users/123` |
+| Complex type on POST, PUT, PATCH | Request body (JSON) | `{ "name": "John" }` |
+| Complex type on GET with route placeholders | Route + Query | See below |
+| `CancellationToken` | Injected from `HttpContext.RequestAborted` | - |
+
+#### Simple Types from Query String
+
+```csharp
+Task<Result<List<User>>> SearchUsersAsync(string? name, int? limit, bool? active);
+// GET /user-service/search-users?name=John&limit=10&active=true
+```
+
+#### Simple Types from Route
+
+When parameter name matches a route placeholder, it binds from the URL path:
+
+```csharp
+[HttpMethod(HttpMethod.Get, "{id}")]
+Task<Result<User>> GetUserAsync(int id);
+// GET /user-service/123
+```
+
+#### Complex Types from Request Body
+
+For POST, PUT, PATCH methods, complex types are deserialized from JSON body:
+
+```csharp
+Task<Result<User>> CreateUserAsync(CreateUserRequest request);
+// POST /user-service/create-user
+// Body: { "name": "John", "email": "john@example.com" }
+```
+
+#### Complex Types from Route + Query (Mixed Binding)
+
+When you have a GET method with route placeholders and a complex type parameter, properties are bound from both route values and query string. **Route values take precedence** over query parameters.
+
+```csharp
+public class PaymentsListRequest
+{
+    public int IdBusMapCoach_RNo { get; set; }  // From route
+    public string? Status { get; set; }         // From query
+    public int? Limit { get; set; }             // From query
+}
+
+[HttpMethod(HttpMethod.Get, "payments/{IdBusMapCoach_RNo}")]
+Task<Result<PaymentsList>> GetPaymentsAsync(PaymentsListRequest request);
+// GET /service/payments/123?Status=Active&Limit=10
+//
+// Result:
+//   request.IdBusMapCoach_RNo = 123    (from route)
+//   request.Status = "Active"           (from query)
+//   request.Limit = 10                  (from query)
+```
+
+This is useful when you need to pass multiple parameters to a GET endpoint while keeping some in the URL path for RESTful design.
+
+#### Supported Simple Types
+
+The following types can be bound from route or query string:
+
+- Primitive types: `int`, `long`, `short`, `byte`, `float`, `double`, `decimal`, `bool`
+- Nullable primitives: `int?`, `long?`, `bool?`, etc.
+- `string`
+- `Guid`
+- `DateTime`, `DateTimeOffset`, `TimeSpan`
+- Enums (case-insensitive matching)
 
 ### HTTP Status to Result Mapping
 
