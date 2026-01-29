@@ -9,6 +9,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>Core logic for Voyager.Common.Proxy.Server - service scanning, endpoint metadata building, and request dispatching.</Description>
     <PackageTags>proxy;http;server;core;rest;api</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <!-- Disable MinVer - use explicit version -->
     <MinVerSkip>true</MinVerSkip>
     <Version>1.0.0</Version>
@@ -26,6 +27,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Voyager.Common.Proxy.Abstractions\Voyager.Common.Proxy.Abstractions.csproj" />
     <ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

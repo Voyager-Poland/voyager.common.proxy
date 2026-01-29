@@ -9,6 +9,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>OWIN integration for Voyager.Common.Proxy.Server - automatically generates HTTP endpoints from service interfaces for .NET Framework 4.8. Uses raw OWIN delegate signatures for maximum compatibility.</Description>
     <PackageTags>proxy;http;server;owin;rest;api;endpoints;netframework</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <!-- No OWIN package dependencies - uses raw OWIN delegate signatures -->
@@ -17,6 +18,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
     <ProjectReference Include="..\Voyager.Common.Proxy.Server.Core\Voyager.Common.Proxy.Server.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
