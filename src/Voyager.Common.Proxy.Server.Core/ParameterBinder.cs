@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -56,6 +58,9 @@ public class ParameterBinder
             case ParameterSource.CancellationToken:
                 return context.CancellationToken;
 
+            case ParameterSource.RouteAndQuery:
+                return BindFromRouteAndQuery(context, param);
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(param.Source));
         }
@@ -95,6 +100,50 @@ public class ParameterBinder
         }
 
         return param.DefaultValue;
+    }
+
+    private static object? BindFromRouteAndQuery(IRequestContext context, ParameterDescriptor param)
+    {
+        // Create instance of the complex type
+        var instance = Activator.CreateInstance(param.Type);
+        if (instance == null)
+        {
+            return param.IsOptional ? param.DefaultValue : null;
+        }
+
+        // Get all settable properties
+        var properties = param.Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite);
+
+        foreach (var property in properties)
+        {
+            string? stringValue = null;
+
+            // Route values take precedence over query parameters
+            if (context.RouteValues.TryGetValue(property.Name, out var routeValue))
+            {
+                stringValue = routeValue;
+            }
+            else if (context.QueryParameters.TryGetValue(property.Name, out var queryValue))
+            {
+                stringValue = queryValue;
+            }
+
+            if (stringValue != null)
+            {
+                try
+                {
+                    var convertedValue = ConvertValue(stringValue, property.PropertyType);
+                    property.SetValue(instance, convertedValue);
+                }
+                catch (ArgumentException)
+                {
+                    // Skip properties that can't be converted
+                }
+            }
+        }
+
+        return instance;
     }
 
     private static async Task<object?> BindFromBodyAsync(IRequestContext context, ParameterDescriptor param)

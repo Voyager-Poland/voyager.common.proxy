@@ -23,5 +23,11 @@ public enum ParameterSource
     /// <summary>
     /// Parameter is a CancellationToken provided by the framework.
     /// </summary>
-    CancellationToken
+    CancellationToken,
+
+    /// <summary>
+    /// Parameter is a complex type bound from route values and query string.
+    /// Route values take precedence over query string for matching properties.
+    /// </summary>
+    RouteAndQuery
 }

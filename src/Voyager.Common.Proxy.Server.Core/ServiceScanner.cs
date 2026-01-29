@@ -236,6 +236,12 @@ public class ServiceScanner
             {
                 source = ParameterSource.Body;
             }
+            else if (IsComplexType(param.ParameterType) && routeParams.Count > 0)
+            {
+                // Complex type with route parameters - bind from route + query
+                // Route parameters will be mapped to matching properties
+                source = ParameterSource.RouteAndQuery;
+            }
             else
             {
                 source = ParameterSource.Query;

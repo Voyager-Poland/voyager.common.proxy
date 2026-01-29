@@ -66,6 +66,23 @@ public class ServiceScannerTests
         public string Product { get; set; } = "";
     }
 
+    public interface IPaymentService
+    {
+        [HttpMethod(ProxyHttpMethod.Get, "get-payments/{IdBusMapCoach_RNo}")]
+        Task<Result<PaymentsListResponse>> GetPaymentsListAsync(PaymentsListRequest paymentsListRequest);
+    }
+
+    public class PaymentsListRequest
+    {
+        public int IdBusMapCoach_RNo { get; set; }
+        public string? Status { get; set; }
+    }
+
+    public class PaymentsListResponse
+    {
+        public List<string> Items { get; set; } = new();
+    }
+
     #endregion
 
     #region ScanInterface Tests
@@ -251,6 +268,16 @@ public class ServiceScannerTests
         Assert.Equal(2, getEndpoint.Parameters.Count);
         Assert.Equal("id", getEndpoint.Parameters[0].Name);
         Assert.Equal("cancellationToken", getEndpoint.Parameters[1].Name);
+    }
+
+    [Fact]
+    public void ScanInterface_WithComplexTypeOnGetWithRouteParams_DetectsAsRouteAndQuery()
+    {
+        var endpoints = _scanner.ScanInterface<IPaymentService>();
+        var getEndpoint = endpoints.First(e => e.Method.Name == "GetPaymentsListAsync");
+        var requestParam = getEndpoint.Parameters.First(p => p.Name == "paymentsListRequest");
+
+        Assert.Equal(ParameterSource.RouteAndQuery, requestParam.Source);
     }
 
     #endregion

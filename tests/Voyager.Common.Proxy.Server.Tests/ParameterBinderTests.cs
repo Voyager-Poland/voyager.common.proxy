@@ -412,4 +412,107 @@ public class ParameterBinderTests
     }
 
     #endregion
+
+    #region RouteAndQuery Parameter Binding Tests
+
+    public class PaymentsListRequest
+    {
+        public int IdBusMapCoach_RNo { get; set; }
+        public string? Status { get; set; }
+        public int? Limit { get; set; }
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_BindsRouteValue()
+    {
+        var context = new TestRequestContext
+        {
+            RouteValues = new Dictionary<string, string> { ["IdBusMapCoach_RNo"] = "123" }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(PaymentsListRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<PaymentsListRequest>(values[0]);
+        Assert.Equal(123, request.IdBusMapCoach_RNo);
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_BindsQueryValue()
+    {
+        var context = new TestRequestContext
+        {
+            QueryParameters = new Dictionary<string, string> { ["Status"] = "Active", ["Limit"] = "10" }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(PaymentsListRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<PaymentsListRequest>(values[0]);
+        Assert.Equal("Active", request.Status);
+        Assert.Equal(10, request.Limit);
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_RouteValueTakesPrecedence()
+    {
+        var context = new TestRequestContext
+        {
+            RouteValues = new Dictionary<string, string> { ["IdBusMapCoach_RNo"] = "100" },
+            QueryParameters = new Dictionary<string, string> { ["IdBusMapCoach_RNo"] = "999" }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(PaymentsListRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<PaymentsListRequest>(values[0]);
+        Assert.Equal(100, request.IdBusMapCoach_RNo); // Route value, not query value
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_BindsMixedValues()
+    {
+        var context = new TestRequestContext
+        {
+            RouteValues = new Dictionary<string, string> { ["IdBusMapCoach_RNo"] = "42" },
+            QueryParameters = new Dictionary<string, string> { ["Status"] = "Pending", ["Limit"] = "5" }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(PaymentsListRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<PaymentsListRequest>(values[0]);
+        Assert.Equal(42, request.IdBusMapCoach_RNo);
+        Assert.Equal("Pending", request.Status);
+        Assert.Equal(5, request.Limit);
+    }
+
+    [Fact]
+    public async Task BindParameters_FromRouteAndQuery_MissingValues_LeavesDefaults()
+    {
+        var context = new TestRequestContext
+        {
+            RouteValues = new Dictionary<string, string> { ["IdBusMapCoach_RNo"] = "1" }
+        };
+        var endpoint = CreateEndpoint(
+            new ParameterDescriptor("request", typeof(PaymentsListRequest), ParameterSource.RouteAndQuery, false, null));
+
+        var values = await _binder.BindParametersAsync(context, endpoint);
+
+        Assert.Single(values);
+        var request = Assert.IsType<PaymentsListRequest>(values[0]);
+        Assert.Equal(1, request.IdBusMapCoach_RNo);
+        Assert.Null(request.Status);
+        Assert.Null(request.Limit);
+    }
+
+    #endregion
 }
