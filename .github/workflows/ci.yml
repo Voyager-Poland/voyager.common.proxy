@@ -1,0 +1,139 @@
+# This workflow will build a .NET project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+
+name: .NET
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          6.0.x
+          8.0.x
+
+    - name: Voyager-Source
+      run: dotnet nuget add source "https://nuget.pkg.github.com/Voyager-Poland/index.json" -n Voyager-Poland -u ${{secrets.VOY_ACTIONLOGIN}} -p ${{secrets.VOY_ACTIONLOGINPASS}} --store-password-in-clear-text
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore -c Release
+
+    # Unit Tests - run on both .NET 6.0 and 8.0
+    - name: Test Client (net6.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Client.Tests/Voyager.Common.Proxy.Client.Tests.csproj --no-build --verbosity normal -c Release --framework net6.0
+
+    - name: Test Client (net8.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Client.Tests/Voyager.Common.Proxy.Client.Tests.csproj --no-build --verbosity normal -c Release --framework net8.0
+
+    - name: Test Server (net6.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Server.Tests/Voyager.Common.Proxy.Server.Tests.csproj --no-build --verbosity normal -c Release --framework net6.0
+
+    - name: Test Server (net8.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Server.Tests/Voyager.Common.Proxy.Server.Tests.csproj --no-build --verbosity normal -c Release --framework net8.0
+
+    # Integration Tests
+    - name: Integration Test Client (net6.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Client.IntegrationTests/Voyager.Common.Proxy.Client.IntegrationTests.csproj --no-build --verbosity normal -c Release --framework net6.0
+
+    - name: Integration Test Client (net8.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Client.IntegrationTests/Voyager.Common.Proxy.Client.IntegrationTests.csproj --no-build --verbosity normal -c Release --framework net8.0
+
+    - name: Integration Test Server (net6.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Server.IntegrationTests/Voyager.Common.Proxy.Server.IntegrationTests.csproj --no-build --verbosity normal -c Release --framework net6.0
+
+    - name: Integration Test Server (net8.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Server.IntegrationTests/Voyager.Common.Proxy.Server.IntegrationTests.csproj --no-build --verbosity normal -c Release --framework net8.0
+
+    # Pack all NuGet packages
+    - name: Pack Voyager.Common.Proxy.Abstractions
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Abstractions/Voyager.Common.Proxy.Abstractions.csproj
+
+    - name: Pack Voyager.Common.Proxy.Client
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Client/Voyager.Common.Proxy.Client.csproj
+
+    - name: Pack Voyager.Common.Proxy.Server.Abstractions
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Server.Abstractions/Voyager.Common.Proxy.Server.Abstractions.csproj
+
+    - name: Pack Voyager.Common.Proxy.Server.Core
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Server.Core/Voyager.Common.Proxy.Server.Core.csproj
+
+    - name: Pack Voyager.Common.Proxy.Server.AspNetCore
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Server.AspNetCore/Voyager.Common.Proxy.Server.AspNetCore.csproj
+
+    - name: Pack Voyager.Common.Proxy.Server.Owin
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Server.Owin/Voyager.Common.Proxy.Server.Owin.csproj
+
+    - name: Upload artifacts for deployment job
+      uses: actions/upload-artifact@v4
+      with:
+        name: NuGetPackages
+        path: ${{ github.workspace }}/src/**/bin/Release/*.nupkg
+        compression-level: 0
+        retention-days: 1
+        overwrite: true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    # Only deploy on push to main (not on PR) or on version tags
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Add Voyager Source
+        run: dotnet nuget add source "https://nuget.pkg.github.com/Voyager-Poland/index.json" -n Voyager-Poland -u ${{secrets.VOY_ACTIONLOGIN}} -p ${{secrets.VOY_ACTIONLOGINPASS}} --store-password-in-clear-text
+
+      - name: Download artifacts from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: NuGetPackages
+
+      - name: Publish to GitHub Packages
+        run: dotnet nuget push **/*.nupkg -s Voyager-Poland --skip-duplicate
+
+      - name: Publish to NuGet.org
+        if: github.event.repository.visibility == 'public'
+        run: dotnet nuget push **/*.nupkg --api-key ${{secrets.VOY_AND_API_KEY}} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    # Only create release on tags
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: NuGetPackages
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: '**/*.nupkg'
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'preview') || contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
