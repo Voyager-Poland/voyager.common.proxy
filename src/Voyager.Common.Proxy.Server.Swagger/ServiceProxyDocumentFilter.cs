@@ -149,6 +149,13 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
         ISchemaGenerator schemaGenerator,
         SchemaRepository schemaRepository)
     {
+        // If we have a CLR type and it's complex, use Swashbuckle's schema generator
+        // This ensures proper model definitions with all properties displayed in Swagger UI
+        if (schema.ClrType != null && !IsPrimitiveType(schema.ClrType) && !IsCollectionType(schema.ClrType))
+        {
+            return schemaGenerator.GenerateSchema(schema.ClrType, schemaRepository);
+        }
+
         // Handle reference
         if (schema.IsReference)
         {
@@ -160,12 +167,6 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
                     Id = schema.GetReferenceName()
                 }
             };
-        }
-
-        // If we have a CLR type and it's complex, use Swashbuckle's schema generator
-        if (schema.ClrType != null && schema.Type == "object" && schema.Properties == null)
-        {
-            return schemaGenerator.GenerateSchema(schema.ClrType, schemaRepository);
         }
 
         var openApiSchema = new OpenApiSchema
@@ -231,5 +232,37 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
             "OPTIONS" => OperationType.Options,
             _ => OperationType.Get
         };
+    }
+
+    private static bool IsPrimitiveType(Type type)
+    {
+        var underlyingType = Nullable.GetUnderlyingType(type);
+        if (underlyingType != null)
+        {
+            type = underlyingType;
+        }
+
+        return type.IsPrimitive ||
+               type == typeof(string) ||
+               type == typeof(decimal) ||
+               type == typeof(DateTime) ||
+               type == typeof(DateTimeOffset) ||
+               type == typeof(TimeSpan) ||
+               type == typeof(Guid) ||
+               type.IsEnum;
+    }
+
+    private static bool IsCollectionType(Type type)
+    {
+        if (type.IsArray) return true;
+        if (!type.IsGenericType) return false;
+
+        var genericDef = type.GetGenericTypeDefinition();
+        return genericDef == typeof(IEnumerable<>) ||
+               genericDef == typeof(ICollection<>) ||
+               genericDef == typeof(IList<>) ||
+               genericDef == typeof(List<>) ||
+               genericDef == typeof(IReadOnlyList<>) ||
+               genericDef == typeof(IReadOnlyCollection<>);
     }
 }
