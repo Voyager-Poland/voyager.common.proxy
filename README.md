@@ -260,6 +260,21 @@ public interface IUserService
 
 // Or configure at mapping time
 app.MapServiceProxy<IUserService>(e => e.RequireAuthorization());
+
+// Custom permission checker for fine-grained control
+app.MapServiceProxy<IVIPService>(options =>
+{
+    options.PermissionChecker = async ctx =>
+    {
+        if (ctx.User?.Identity?.IsAuthenticated != true)
+            return PermissionResult.Unauthenticated();
+
+        if (ctx.Method.Name == "DeleteAsync" && !ctx.User.IsInRole("Admin"))
+            return PermissionResult.Denied("Admin role required");
+
+        return PermissionResult.Granted();
+    };
+});
 ```
 
 ## Package Details
