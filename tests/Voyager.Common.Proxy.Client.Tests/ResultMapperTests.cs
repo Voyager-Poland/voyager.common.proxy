@@ -184,6 +184,19 @@ public class ResultMapperTests
     }
 
     [Fact]
+    public async Task MapResponseAsync_502BadGateway_ReturnsUnavailableError()
+    {
+        var response = CreateErrorResponse(HttpStatusCode.BadGateway, "Bad gateway");
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<User>), JsonOptions);
+
+        result.Should().BeOfType<Result<User>>();
+        var typedResult = (Result<User>)result;
+        typedResult.IsFailure.Should().BeTrue();
+        typedResult.Error!.Type.Should().Be(ErrorType.Unavailable);
+    }
+
+    [Fact]
     public async Task MapResponseAsync_503ServiceUnavailable_ReturnsUnavailableError()
     {
         var response = CreateErrorResponse(HttpStatusCode.ServiceUnavailable, "Service down");

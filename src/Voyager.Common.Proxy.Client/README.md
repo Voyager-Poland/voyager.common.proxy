@@ -100,8 +100,9 @@ public class UserController
 | 404 Not Found | `Result.Failure(Error.NotFound(...))` |
 | 409 Conflict | `Result.Failure(Error.Conflict(...))` |
 | 408, 504 Timeout | `Result.Failure(Error.Timeout(...))` |
-| 429, 503 | `Result.Failure(Error.Unavailable(...))` |
-| 5xx | `Result.Failure(Error.Unexpected(...))` |
+| 429, 502, 503 | `Result.Failure(Error.Unavailable(...))` |
+| 500 | `Result.Failure(Error.Unexpected(...))` |
+| Other 5xx | `Result.Failure(Error.Unexpected(...))` |
 
 ### Connection Errors
 
@@ -364,6 +365,100 @@ static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
         .HandleTransientHttpError()
         .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
 }
+```
+
+## Result-Level Resilience
+
+In addition to HTTP-level policies (Polly), you can apply retry logic at the Result level using `ResultResilienceExtensions`.
+
+### Retry with Default Transient Error Policy
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+
+// Retry transient errors (Unavailable, Timeout) with exponential backoff
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id));
+
+// Default: 3 attempts, 1s/2s/4s delays
+```
+
+### Custom Retry Policy
+
+```csharp
+// Custom max attempts and base delay
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 5, baseDelayMs: 500));
+
+// Custom retry conditions
+var policy = ResultResilienceExtensions.CustomRetryPolicy(
+    maxAttempts: 5,
+    shouldRetry: error => error.Type == ErrorType.Unavailable || error.Code == "RATE_LIMIT",
+    delayStrategy: attempt => 500 * attempt);  // Linear backoff
+
+var result = await ResultResilienceExtensions.RetryAsync(() => _userService.GetUserAsync(id), policy);
+```
+
+### Error Classification
+
+According to ADR-007, errors are classified as:
+
+| Classification | ErrorType | Retryable | Circuit Breaker |
+|----------------|-----------|-----------|-----------------|
+| **Transient** | Unavailable, Timeout | Yes | Counts |
+| **Infrastructure** | Database, Unexpected | No | Counts |
+| **Business** | Validation, NotFound, Permission, Unauthorized, Conflict, Business, Cancelled | No | Ignores |
+
+Helper methods for classification:
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+
+// Check if error is transient (retryable)
+if (error.IsTransient())
+{
+    // Retry logic
+}
+
+// Check if error should count towards circuit breaker
+if (error.IsInfrastructureFailure())
+{
+    // Log infrastructure issue
+}
+```
+
+### HTTP Status Code Mapping
+
+| HTTP Status | ErrorType | Classification |
+|-------------|-----------|----------------|
+| 408 Request Timeout | Timeout | Transient |
+| 429 Too Many Requests | Unavailable | Transient |
+| 502 Bad Gateway | Unavailable | Transient |
+| 503 Service Unavailable | Unavailable | Transient |
+| 504 Gateway Timeout | Timeout | Transient |
+| 500 Internal Server Error | Unexpected | Infrastructure |
+| 400 Bad Request | Validation | Business |
+| 401 Unauthorized | Unauthorized | Business |
+| 403 Forbidden | Permission | Business |
+| 404 Not Found | NotFound | Business |
+| 409 Conflict | Conflict | Business |
+
+### Combining with Polly
+
+For comprehensive resilience, combine HTTP-level (Polly) and Result-level policies:
+
+```csharp
+// HTTP-level: Handle transport errors (connection refused, DNS failures)
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddPolicyHandler(HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(3, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt))));
+
+// Result-level: Handle semantic errors after HTTP succeeds
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 3, baseDelayMs: 1000));
 ```
 
 ## JSON Serialization

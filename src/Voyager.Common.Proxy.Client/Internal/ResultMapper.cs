@@ -130,20 +130,37 @@ namespace Voyager.Common.Proxy.Client.Internal
             }
         }
 
+        /// <summary>
+        /// Maps HTTP status code to appropriate Error type.
+        /// </summary>
+        /// <remarks>
+        /// Mapping follows ADR-007 Resilience Strategy:
+        /// - Transient (retryable): Unavailable, Timeout (408, 429, 502, 503, 504)
+        /// - Infrastructure (circuit breaker counts): above + Unexpected (500)
+        /// - Permanent (no retry, CB ignores): Validation, NotFound, Permission, etc.
+        /// </remarks>
         private static Error MapStatusCodeToError(HttpStatusCode statusCode, string message)
         {
             return statusCode switch
             {
+                // Permanent errors - no retry, circuit breaker ignores
                 HttpStatusCode.BadRequest => Error.ValidationError(message),
                 HttpStatusCode.Unauthorized => Error.UnauthorizedError(message),
                 HttpStatusCode.Forbidden => Error.PermissionError(message),
                 HttpStatusCode.NotFound => Error.NotFoundError(message),
                 HttpStatusCode.Conflict => Error.ConflictError(message),
-                HttpStatusCode.RequestTimeout => Error.TimeoutError(message),
-                (HttpStatusCode)429 => Error.UnavailableError(message), // TooManyRequests (not in net48)
-                HttpStatusCode.ServiceUnavailable => Error.UnavailableError(message),
-                HttpStatusCode.GatewayTimeout => Error.TimeoutError(message),
+
+                // Transient errors - retry, circuit breaker counts
+                HttpStatusCode.RequestTimeout => Error.TimeoutError(message),           // 408
+                (HttpStatusCode)429 => Error.UnavailableError(message),                 // TooManyRequests
+                HttpStatusCode.BadGateway => Error.UnavailableError(message),           // 502
+                HttpStatusCode.ServiceUnavailable => Error.UnavailableError(message),   // 503
+                HttpStatusCode.GatewayTimeout => Error.TimeoutError(message),           // 504
+
+                // Infrastructure errors - no retry, but circuit breaker counts
+                HttpStatusCode.InternalServerError => Error.UnexpectedError(message),   // 500
                 _ when (int)statusCode >= 500 => Error.UnexpectedError(message),
+
                 _ => Error.UnexpectedError($"HTTP {(int)statusCode}: {message}")
             };
         }
