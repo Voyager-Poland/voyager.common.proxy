@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Core logic for Swagger/OpenAPI generation from Voyager.Common.Proxy service interfaces. Shared between ASP.NET Core and OWIN implementations.</Description>
+    <PackageTags>proxy;http;server;swagger;openapi;documentation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>$(NoWarn);NU1702</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Core\Voyager.Common.Proxy.Server.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
