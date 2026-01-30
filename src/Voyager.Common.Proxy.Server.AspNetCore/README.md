@@ -265,6 +265,149 @@ Services are resolved from `IServiceProvider` for each request:
 app.MapServiceProxy<IUserService>();
 ```
 
+## Custom Permission Checking
+
+For fine-grained access control beyond role-based authorization, use the permission checker:
+
+### Inline Permission Checker
+
+```csharp
+app.MapServiceProxy<IVIPService>(options =>
+{
+    options.PermissionChecker = async ctx =>
+    {
+        // Check authentication
+        if (ctx.User?.Identity?.IsAuthenticated != true)
+            return PermissionResult.Unauthenticated();
+
+        // Access HttpContext for services
+        var httpContext = (HttpContext)ctx.RawContext;
+        var checker = httpContext.RequestServices.GetRequiredService<IVIPPermissionChecker>();
+
+        // Check permission based on method and parameters
+        return await checker.CheckAsync(
+            ctx.User,
+            ctx.Method.Name,
+            ctx.Parameters);
+    };
+});
+```
+
+### Permission Checker with Context-Aware Factory
+
+```csharp
+app.MapServiceProxy<IVIPService>(options =>
+{
+    // Create service with per-request identity
+    options.ContextAwareFactory = httpContext =>
+    {
+        var identity = PilotIdentityFactory.Create(httpContext.User);
+        var actionModule = httpContext.RequestServices.GetRequiredService<ActionModule>();
+        return new VIPService(identity, actionModule);
+    };
+
+    // Check permissions before service creation
+    options.PermissionChecker = async ctx =>
+    {
+        if (ctx.User?.Identity?.IsAuthenticated != true)
+            return PermissionResult.Unauthenticated();
+
+        // Method-level checks
+        if (ctx.Method.Name == "DeleteAsync" && !ctx.User.IsInRole("Admin"))
+            return PermissionResult.Denied("Admin role required for delete operations");
+
+        // Parameter-level checks
+        if (ctx.Parameters.TryGetValue("id", out var idObj) && idObj is int id)
+        {
+            var httpContext = (HttpContext)ctx.RawContext;
+            var ownershipChecker = httpContext.RequestServices.GetRequiredService<IOwnershipChecker>();
+
+            if (!await ownershipChecker.CanAccessAsync(ctx.User, id))
+                return PermissionResult.Denied("You don't have access to this resource");
+        }
+
+        return PermissionResult.Granted();
+    };
+});
+```
+
+### Typed Permission Checker (Reusable)
+
+For complex permission logic, implement `IServicePermissionChecker<TService>`:
+
+```csharp
+public class VIPServicePermissionChecker : IServicePermissionChecker<IVIPService>
+{
+    private readonly IOwnershipService _ownershipService;
+
+    public VIPServicePermissionChecker(IOwnershipService ownershipService)
+    {
+        _ownershipService = ownershipService;
+    }
+
+    public async Task<PermissionResult> CheckPermissionAsync(PermissionContext context)
+    {
+        if (context.User?.Identity?.IsAuthenticated != true)
+            return PermissionResult.Unauthenticated();
+
+        // Different rules for different methods
+        return context.Method.Name switch
+        {
+            "GetAsync" => PermissionResult.Granted(),
+            "CreateAsync" => CheckCreatePermission(context),
+            "DeleteAsync" => await CheckDeletePermissionAsync(context),
+            _ => PermissionResult.Granted()
+        };
+    }
+
+    private PermissionResult CheckCreatePermission(PermissionContext context)
+    {
+        if (!context.User!.IsInRole("Creator"))
+            return PermissionResult.Denied("Creator role required");
+        return PermissionResult.Granted();
+    }
+
+    private async Task<PermissionResult> CheckDeletePermissionAsync(PermissionContext context)
+    {
+        if (context.Parameters.TryGetValue("id", out var idObj) && idObj is int id)
+        {
+            var canDelete = await _ownershipService.CanDeleteAsync(context.User!, id);
+            if (!canDelete)
+                return PermissionResult.Denied("Cannot delete this resource");
+        }
+        return PermissionResult.Granted();
+    }
+}
+
+// Registration
+builder.Services.AddScoped<VIPServicePermissionChecker>();
+
+app.MapServiceProxy<IVIPService>(options =>
+{
+    options.PermissionCheckerInstance = app.Services
+        .GetRequiredService<VIPServicePermissionChecker>();
+});
+```
+
+### PermissionContext Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `User` | `IPrincipal?` | The authenticated user (null for anonymous) |
+| `ServiceType` | `Type` | The service interface type |
+| `Method` | `MethodInfo` | The method being called |
+| `Endpoint` | `EndpointDescriptor` | Route and parameter info |
+| `Parameters` | `IReadOnlyDictionary<string, object?>` | Deserialized request parameters |
+| `RawContext` | `object` | The `HttpContext` (cast to access) |
+
+### PermissionResult Factory Methods
+
+| Method | HTTP Status | Use Case |
+|--------|-------------|----------|
+| `PermissionResult.Granted()` | - | Allow access |
+| `PermissionResult.Denied(reason)` | 403 Forbidden | User authenticated but not allowed |
+| `PermissionResult.Unauthenticated()` | 401 Unauthorized | User not authenticated |
+
 ## Target Frameworks
 
 - `net6.0`
