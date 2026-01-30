@@ -57,6 +57,8 @@ Implementujemy **strategię opartą na eventach** z interfejsem `IProxyDiagnosti
 
 ### Interfejs IProxyDiagnostics
 
+Interfejs definiuje kontrakt dla DI, mockowania i testów:
+
 ```csharp
 namespace Voyager.Common.Proxy.Diagnostics
 {
@@ -64,6 +66,10 @@ namespace Voyager.Common.Proxy.Diagnostics
     /// Interface for receiving diagnostic events from the proxy.
     /// Implement this interface to integrate with logging, APM, or metrics systems.
     /// </summary>
+    /// <remarks>
+    /// For easier implementation, inherit from <see cref="ProxyDiagnosticsHandler"/>
+    /// which provides default empty implementations for all methods.
+    /// </remarks>
     public interface IProxyDiagnostics
     {
         /// <summary>
@@ -91,6 +97,83 @@ namespace Voyager.Common.Proxy.Diagnostics
         /// </summary>
         void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e);
     }
+}
+```
+
+### Klasa abstrakcyjna ProxyDiagnosticsHandler
+
+Klasa bazowa z domyślnymi pustymi implementacjami - użytkownik nadpisuje tylko metody, które go interesują:
+
+```csharp
+namespace Voyager.Common.Proxy.Diagnostics
+{
+    /// <summary>
+    /// Base class for proxy diagnostics handlers.
+    /// Override only the events you're interested in - all methods have default empty implementations.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// // Only handle circuit breaker events
+    /// public class SlackAlertHandler : ProxyDiagnosticsHandler
+    /// {
+    ///     public override void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e)
+    ///     {
+    ///         if (e.NewState == CircuitState.Open)
+    ///             _slack.SendAlert($"Circuit breaker OPEN: {e.ServiceName}");
+    ///     }
+    ///     // Other methods use default empty implementation from base class
+    /// }
+    /// </code>
+    /// </example>
+    public abstract class ProxyDiagnosticsHandler : IProxyDiagnostics
+    {
+        /// <inheritdoc />
+        public virtual void OnRequestStarting(RequestStartingEvent e) { }
+
+        /// <inheritdoc />
+        public virtual void OnRequestCompleted(RequestCompletedEvent e) { }
+
+        /// <inheritdoc />
+        public virtual void OnRequestFailed(RequestFailedEvent e) { }
+
+        /// <inheritdoc />
+        public virtual void OnRetryAttempt(RetryAttemptEvent e) { }
+
+        /// <inheritdoc />
+        public virtual void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e) { }
+    }
+}
+```
+
+### Dlaczego interfejs + klasa abstrakcyjna?
+
+| Komponent | Użycie |
+|-----------|--------|
+| `IProxyDiagnostics` | DI registration, mockowanie w testach, type constraints |
+| `ProxyDiagnosticsHandler` | Łatwa implementacja - nadpisz tylko to, co potrzebujesz |
+
+```csharp
+// Pełna implementacja - używa interfejsu
+public class FullMetricsHandler : IProxyDiagnostics
+{
+    // Musi zaimplementować WSZYSTKIE metody
+    public void OnRequestStarting(RequestStartingEvent e) { ... }
+    public void OnRequestCompleted(RequestCompletedEvent e) { ... }
+    public void OnRequestFailed(RequestFailedEvent e) { ... }
+    public void OnRetryAttempt(RetryAttemptEvent e) { ... }
+    public void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e) { ... }
+}
+
+// Selektywna implementacja - używa klasy abstrakcyjnej
+public class CircuitBreakerAlerter : ProxyDiagnosticsHandler
+{
+    // Nadpisuje TYLKO to, co potrzebuje
+    public override void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e)
+    {
+        if (e.NewState == CircuitState.Open)
+            SendSlackAlert(e);
+    }
+    // Pozostałe metody - domyślne puste z klasy bazowej
 }
 ```
 
