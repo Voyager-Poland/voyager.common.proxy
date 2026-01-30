@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net48</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Swagger/OpenAPI integration for Voyager.Common.Proxy.Server on OWIN/.NET Framework 4.8. Automatically generates API documentation from service interfaces using Swagger-Net.</Description>
+    <PackageTags>proxy;http;server;swagger;openapi;owin;netframework;swagger-net;documentation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swagger-Net" Version="8.5.28.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Swagger.Core\Voyager.Common.Proxy.Server.Swagger.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

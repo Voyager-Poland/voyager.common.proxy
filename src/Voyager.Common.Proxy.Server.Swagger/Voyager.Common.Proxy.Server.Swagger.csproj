@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Swagger/OpenAPI integration for Voyager.Common.Proxy.Server on ASP.NET Core. Automatically generates API documentation from service interfaces using Swashbuckle.</Description>
+    <PackageTags>proxy;http;server;swagger;openapi;aspnetcore;swashbuckle;documentation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Disable OpenAPI document generation at build time - this is a library, not an app -->
+    <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voyager.Common.Proxy.Server.Swagger.Core\Voyager.Common.Proxy.Server.Swagger.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
