@@ -8,6 +8,7 @@ namespace Voyager.Common.Proxy.Client.Internal
     using System.Threading;
     using System.Threading.Tasks;
     using Voyager.Common.Proxy.Client.Abstractions;
+    using Voyager.Common.Resilience;
     using Voyager.Common.Results;
 
     using ProxyHttpMethod = Voyager.Common.Proxy.Abstractions.HttpMethod;
@@ -18,27 +19,32 @@ namespace Voyager.Common.Proxy.Client.Internal
     /// <remarks>
     /// This class follows the Single Responsibility Principle (SRP) -
     /// it is only responsible for HTTP communication, not for proxy creation.
+    /// Resilience (retry, circuit breaker) is applied at the Result level
+    /// using Voyager.Common.Resilience.
     /// </remarks>
     internal sealed class HttpMethodInterceptor : IMethodInterceptor
     {
         private readonly HttpClient _httpClient;
         private readonly string _servicePrefix;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly ResilienceOptions _resilience;
+        private readonly CircuitBreakerPolicy? _circuitBreaker;
 
         public HttpMethodInterceptor(HttpClient httpClient, ServiceProxyOptions options)
+            : this(httpClient, options, typeof(HttpMethodInterceptor).DeclaringType ?? typeof(object), null)
         {
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-
-            if (options is null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
-
-            _servicePrefix = RouteBuilder.GetServicePrefix(typeof(HttpMethodInterceptor).DeclaringType ?? typeof(object));
-            _jsonOptions = options.JsonSerializerOptions ?? ServiceProxyOptions.DefaultJsonSerializerOptions;
         }
 
         public HttpMethodInterceptor(HttpClient httpClient, ServiceProxyOptions options, Type serviceType)
+            : this(httpClient, options, serviceType, null)
+        {
+        }
+
+        public HttpMethodInterceptor(
+            HttpClient httpClient,
+            ServiceProxyOptions options,
+            Type serviceType,
+            CircuitBreakerPolicy? circuitBreaker)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
@@ -54,6 +60,8 @@ namespace Voyager.Common.Proxy.Client.Internal
 
             _servicePrefix = RouteBuilder.GetServicePrefix(serviceType);
             _jsonOptions = options.JsonSerializerOptions ?? ServiceProxyOptions.DefaultJsonSerializerOptions;
+            _resilience = options.Resilience;
+            _circuitBreaker = circuitBreaker;
         }
 
         /// <inheritdoc/>
@@ -88,7 +96,118 @@ namespace Voyager.Common.Proxy.Client.Internal
                     $"Found: {returnType.Name}");
             }
 
-            return await ExecuteHttpRequestAsync(method, arguments, resultType).ConfigureAwait(false);
+            return await ExecuteWithResilienceAsync(method, arguments, resultType).ConfigureAwait(false);
+        }
+
+        private async Task<object> ExecuteWithResilienceAsync(MethodInfo method, object?[] args, Type resultType)
+        {
+            // Check circuit breaker first
+            if (_circuitBreaker != null)
+            {
+                var allowResult = await _circuitBreaker.ShouldAllowRequestAsync().ConfigureAwait(false);
+                if (allowResult.IsFailure)
+                {
+                    return CreateFailureResult(resultType, allowResult.Error!);
+                }
+            }
+
+            // Execute with retry if enabled
+            if (_resilience.Retry.Enabled)
+            {
+                return await ExecuteWithRetryAsync(method, args, resultType).ConfigureAwait(false);
+            }
+
+            // Execute without retry
+            var result = await ExecuteHttpRequestAsync(method, args, resultType).ConfigureAwait(false);
+            await RecordResultForCircuitBreakerAsync(result, resultType).ConfigureAwait(false);
+            return result;
+        }
+
+        private async Task<object> ExecuteWithRetryAsync(MethodInfo method, object?[] args, Type resultType)
+        {
+            int attempt = 0;
+            int maxAttempts = _resilience.Retry.MaxAttempts;
+            int baseDelayMs = _resilience.Retry.BaseDelayMs;
+            object lastResult;
+
+            while (true)
+            {
+                attempt++;
+                lastResult = await ExecuteHttpRequestAsync(method, args, resultType).ConfigureAwait(false);
+
+                // Check if success
+                if (IsSuccessResult(lastResult, resultType))
+                {
+                    await RecordResultForCircuitBreakerAsync(lastResult, resultType).ConfigureAwait(false);
+                    return lastResult;
+                }
+
+                // Get error from result
+                var error = GetErrorFromResult(lastResult, resultType);
+
+                // Only retry transient errors
+                if (!IsTransientError(error) || attempt >= maxAttempts)
+                {
+                    await RecordResultForCircuitBreakerAsync(lastResult, resultType).ConfigureAwait(false);
+                    return lastResult;
+                }
+
+                // Calculate delay with exponential backoff
+                int delayMs = baseDelayMs * (int)Math.Pow(2, attempt - 1);
+                await Task.Delay(delayMs).ConfigureAwait(false);
+            }
+        }
+
+        private async Task RecordResultForCircuitBreakerAsync(object result, Type resultType)
+        {
+            if (_circuitBreaker == null)
+            {
+                return;
+            }
+
+            if (IsSuccessResult(result, resultType))
+            {
+                await _circuitBreaker.RecordSuccessAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                var error = GetErrorFromResult(result, resultType);
+                if (error != null)
+                {
+                    await _circuitBreaker.RecordFailureAsync(error).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static bool IsSuccessResult(object result, Type resultType)
+        {
+            var isSuccessProperty = resultType.GetProperty("IsSuccess");
+            if (isSuccessProperty != null)
+            {
+                return (bool)(isSuccessProperty.GetValue(result) ?? false);
+            }
+            return false;
+        }
+
+        private static Error? GetErrorFromResult(object result, Type resultType)
+        {
+            var errorProperty = resultType.GetProperty("Error");
+            if (errorProperty != null)
+            {
+                return errorProperty.GetValue(result) as Error;
+            }
+            return null;
+        }
+
+        private static bool IsTransientError(Error? error)
+        {
+            if (error == null)
+            {
+                return false;
+            }
+
+            return error.Type == ErrorType.Unavailable
+                || error.Type == ErrorType.Timeout;
         }
 
         private async Task<object> ExecuteHttpRequestAsync(MethodInfo method, object?[] args, Type resultType)

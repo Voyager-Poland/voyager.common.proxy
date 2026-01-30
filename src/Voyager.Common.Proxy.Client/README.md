@@ -461,6 +461,161 @@ var result = await ResultResilienceExtensions.RetryAsync(
     ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 3, baseDelayMs: 1000));
 ```
 
+### Built-in Resilience (Retry + Circuit Breaker)
+
+The simplest way to add resilience is to configure it at registration time. Both retry and circuit breaker are applied automatically to all proxy calls.
+
+The circuit breaker uses [Voyager.Common.Resilience](https://www.nuget.org/packages/Voyager.Common.Resilience/) internally and automatically:
+- **Counts** infrastructure errors: `Unavailable`, `Timeout`, `Database`, `Unexpected`
+- **Ignores** business errors: `Validation`, `NotFound`, `Permission`, etc.
+
+#### ASP.NET Core
+
+```csharp
+// Program.cs - configure resilience at registration
+builder.Services.AddServiceProxy<IPaymentService>(options =>
+{
+    options.BaseUrl = new Uri("https://payments.internal.com");
+
+    // Enable retry with exponential backoff
+    options.Resilience.Retry.Enabled = true;
+    options.Resilience.Retry.MaxAttempts = 3;
+    options.Resilience.Retry.BaseDelayMs = 1000;  // 1s, 2s, 4s
+
+    // Enable circuit breaker
+    options.Resilience.CircuitBreaker.Enabled = true;
+    options.Resilience.CircuitBreaker.FailureThreshold = 5;
+    options.Resilience.CircuitBreaker.OpenTimeout = TimeSpan.FromSeconds(30);
+});
+
+// Usage - resilience is automatic!
+public class OrderService
+{
+    private readonly IPaymentService _paymentService;
+
+    public OrderService(IPaymentService paymentService)
+    {
+        _paymentService = paymentService;
+    }
+
+    public async Task<Result<Order>> ProcessOrderAsync(OrderRequest request)
+    {
+        // Retry and circuit breaker are applied automatically
+        var paymentResult = await _paymentService.ChargeAsync(request.PaymentDetails);
+
+        return paymentResult.Bind(payment => CreateOrder(request, payment));
+    }
+}
+```
+
+#### OWIN / .NET Framework 4.8
+
+```csharp
+// Startup.cs - same configuration API
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var services = new ServiceCollection();
+
+        services.AddServiceProxy<IPaymentService>(options =>
+        {
+            options.BaseUrl = new Uri("https://payments.internal.com");
+
+            options.Resilience.Retry.Enabled = true;
+            options.Resilience.Retry.MaxAttempts = 3;
+
+            options.Resilience.CircuitBreaker.Enabled = true;
+            options.Resilience.CircuitBreaker.FailureThreshold = 5;
+        });
+
+        // Build ServiceProvider and configure OWIN...
+    }
+}
+
+// Usage - same as ASP.NET Core
+public class OrderService
+{
+    private readonly IPaymentService _paymentService;
+
+    public async Task<Result<Order>> ProcessOrderAsync(OrderRequest request)
+    {
+        // Resilience is automatic
+        return await _paymentService.ChargeAsync(request.PaymentDetails)
+            .BindAsync(payment => CreateOrder(request, payment));
+    }
+}
+```
+
+#### Handling Circuit Breaker Open State
+
+```csharp
+var result = await _paymentService.ChargeAsync(request.PaymentDetails);
+
+result.Switch(
+    onSuccess: payment => ProcessPayment(payment),
+    onFailure: error =>
+    {
+        if (error.Type == ErrorType.CircuitBreakerOpen)
+        {
+            _logger.LogWarning("Payment service circuit breaker open: {Message}", error.Message);
+            return UseFallbackPaymentMethod();
+        }
+        return HandleError(error);
+    });
+```
+
+### Manual Resilience (Advanced)
+
+For more control, you can use `Voyager.Common.Resilience` extensions directly:
+
+```csharp
+using Voyager.Common.Resilience;
+
+// Register proxy without built-in resilience
+builder.Services.AddServiceProxy<IUserService>("https://api.example.com");
+
+// Register shared circuit breaker
+builder.Services.AddSingleton(new CircuitBreakerPolicy(
+    failureThreshold: 5,
+    openTimeout: TimeSpan.FromSeconds(30)));
+
+// Apply manually in code
+public async Task<Result<User>> GetUserAsync(int id)
+{
+    return await _userService.GetUserAsync(id)
+        .BindWithCircuitBreakerAsync(user => EnrichUserAsync(user), _circuitBreaker);
+}
+```
+
+#### Complete Manual Resilience Pattern
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+using Voyager.Common.Resilience;
+
+// Retry transient errors, then apply circuit breaker
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 3, baseDelayMs: 500))
+    .BindWithCircuitBreakerAsync(
+        user => _externalService.EnrichUserDataAsync(user),
+        _circuitBreaker);
+
+// Handle circuit breaker open state
+result.Switch(
+    onSuccess: data => ProcessData(data),
+    onFailure: error =>
+    {
+        if (error.Type == ErrorType.CircuitBreakerOpen)
+        {
+            _logger.LogWarning("Circuit breaker open: {Message}", error.Message);
+            return GetCachedData(); // Fallback
+        }
+        _logger.LogError("Operation failed: {Error}", error);
+    });
+```
+
 ## JSON Serialization
 
 By default, the proxy uses `System.Text.Json` with camelCase naming. You can customize this:
@@ -509,19 +664,21 @@ public interface IOrderService
 **Required:**
 - `Voyager.Common.Proxy.Abstractions` - HTTP attributes
 - `Voyager.Common.Results` - Result pattern
+- `Voyager.Common.Resilience` - Circuit breaker pattern (used internally)
 - `Microsoft.Extensions.Http` - HttpClientFactory
 
 **net48 only:**
 - `Castle.Core` - Dynamic proxy generation
 
 **Optional:**
-- `Microsoft.Extensions.Http.Polly` - Retry policies, circuit breakers
+- `Microsoft.Extensions.Http.Polly` - HTTP-level retry policies
 
 ## Related Packages
 
 - **Voyager.Common.Proxy.Abstractions** - HTTP attributes (optional)
 - **Voyager.Common.Proxy.Server** - Server-side endpoint generation
 - **Voyager.Common.Results** - Result pattern library
+- **Voyager.Common.Resilience** - Circuit breaker for Result types (included)
 
 ## License
 

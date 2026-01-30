@@ -4,6 +4,7 @@ namespace Voyager.Common.Proxy.Client
     using System.Net.Http;
     using Voyager.Common.Proxy.Client.Abstractions;
     using Voyager.Common.Proxy.Client.Internal;
+    using Voyager.Common.Resilience;
 
     /// <summary>
     /// Factory for creating HTTP service proxies.
@@ -27,6 +28,21 @@ namespace Voyager.Common.Proxy.Client
         /// </exception>
         public static TService Create(HttpClient httpClient, ServiceProxyOptions options)
         {
+            return Create(httpClient, options, null);
+        }
+
+        /// <summary>
+        /// Creates a new instance of the service proxy with optional circuit breaker.
+        /// </summary>
+        /// <param name="httpClient">The HTTP client to use for requests.</param>
+        /// <param name="options">The proxy configuration options.</param>
+        /// <param name="circuitBreaker">Optional shared circuit breaker policy instance.</param>
+        /// <returns>A proxy instance that implements <typeparamref name="TService"/>.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="httpClient"/> or <paramref name="options"/> is null.
+        /// </exception>
+        internal static TService Create(HttpClient httpClient, ServiceProxyOptions options, CircuitBreakerPolicy? circuitBreaker)
+        {
             if (httpClient is null)
             {
                 throw new ArgumentNullException(nameof(httpClient));
@@ -37,7 +53,7 @@ namespace Voyager.Common.Proxy.Client
                 throw new ArgumentNullException(nameof(options));
             }
 
-            var interceptor = new HttpMethodInterceptor(httpClient, options, typeof(TService));
+            var interceptor = new HttpMethodInterceptor(httpClient, options, typeof(TService), circuitBreaker);
             var factory = ProxyFactoryProvider.GetFactory();
 
             return factory.CreateProxy<TService>(interceptor);

@@ -1,6 +1,6 @@
 # ADR-007: Strategia Resilience - Retry i Circuit Breaker
 
-**Status:** Propozycja
+**Status:** Zaakceptowane
 **Data:** 2026-01-30
 **Autor:** [Do uzupełnienia]
 
@@ -327,27 +327,31 @@ public class ResultAwareResilienceHandler : DelegatingHandler
 ### Faza 1: Dokumentacja i wytyczne
 
 - [x] ADR definiujący strategię
-- [ ] Aktualizacja README z przykładami
-- [ ] Tabela mapowania HTTP → ErrorType w dokumentacji
+- [x] Aktualizacja README z przykładami
+- [x] Tabela mapowania HTTP → ErrorType w dokumentacji
 
 ### Faza 2: Integracja z Voyager.Common.Resilience
 
-- [ ] Dodanie referencji do `Voyager.Common.Resilience` (opcjonalna)
-- [ ] Extension methods dla łatwej integracji
-- [ ] Przykłady w dokumentacji
+- [x] Dodanie referencji do `Voyager.Common.Resilience` (wymagana)
+- [x] Extension methods dla łatwej integracji (`ResultResilienceExtensions`)
+- [x] Przykłady w dokumentacji
 
-### Faza 3: Gotowe konfiguracje (opcjonalne)
+### Faza 3: Konfiguracja przy rejestracji
+
+- [x] `ResilienceOptions` z konfiguracją Retry i CircuitBreaker
+- [x] Integracja z `ServiceProxyOptions`
+- [x] Automatyczne stosowanie resilience dla wszystkich wywołań proxy
 
 ```csharp
-// Propozycja API dla przyszłej implementacji
-services.AddServiceProxy<IUserService>("https://api.example.com")
-    .AddVoyagerResilience(options =>
-    {
-        options.Retry.MaxAttempts = 3;
-        options.Retry.BaseDelay = TimeSpan.FromSeconds(1);
-        options.CircuitBreaker.FailureThreshold = 5;
-        options.CircuitBreaker.OpenTimeout = TimeSpan.FromSeconds(30);
-    });
+// Zaimplementowane API
+services.AddServiceProxy<IUserService>(options =>
+{
+    options.BaseUrl = new Uri("https://api.example.com");
+    options.Resilience.Retry.Enabled = true;
+    options.Resilience.Retry.MaxAttempts = 3;
+    options.Resilience.CircuitBreaker.Enabled = true;
+    options.Resilience.CircuitBreaker.FailureThreshold = 5;
+});
 ```
 
 ## Ryzyka i mitigacje

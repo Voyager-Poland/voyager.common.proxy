@@ -40,6 +40,24 @@ namespace Voyager.Common.Proxy.Client
         public JsonSerializerOptions? JsonSerializerOptions { get; set; }
 
         /// <summary>
+        /// Gets the resilience options for retry and circuit breaker policies.
+        /// </summary>
+        /// <remarks>
+        /// Both retry and circuit breaker are disabled by default.
+        /// Enable them by setting <c>Resilience.Retry.Enabled = true</c>
+        /// and/or <c>Resilience.CircuitBreaker.Enabled = true</c>.
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// options.Resilience.Retry.Enabled = true;
+        /// options.Resilience.Retry.MaxAttempts = 3;
+        /// options.Resilience.CircuitBreaker.Enabled = true;
+        /// options.Resilience.CircuitBreaker.FailureThreshold = 5;
+        /// </code>
+        /// </example>
+        public ResilienceOptions Resilience { get; } = new ResilienceOptions();
+
+        /// <summary>
         /// Gets the default JSON serializer options.
         /// </summary>
         internal static JsonSerializerOptions DefaultJsonSerializerOptions { get; } = new JsonSerializerOptions
