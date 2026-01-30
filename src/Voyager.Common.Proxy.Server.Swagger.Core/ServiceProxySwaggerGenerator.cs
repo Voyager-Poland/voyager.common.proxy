@@ -116,6 +116,7 @@ public class ServiceProxySwaggerGenerator
     private List<ParameterDefinition> CreateParameters(EndpointDescriptor endpoint)
     {
         var parameters = new List<ParameterDefinition>();
+        var routeParams = ExtractRouteParameterNamesWithOriginalCase(endpoint.RouteTemplate);
 
         foreach (var param in endpoint.Parameters)
         {
@@ -129,7 +130,7 @@ public class ServiceProxySwaggerGenerator
             // Handle RouteAndQuery - expand properties as parameters
             if (param.Source == ParameterSource.RouteAndQuery)
             {
-                var expandedParams = ExpandRouteAndQueryParameters(param, endpoint.RouteTemplate);
+                var expandedParams = ExpandRouteAndQueryParameters(param, endpoint.RouteTemplate, routeParams);
                 parameters.AddRange(expandedParams);
                 continue;
             }
@@ -140,8 +141,14 @@ public class ServiceProxySwaggerGenerator
 
             var schema = _schemaGenerator.GenerateSchema(param.Type);
 
+            // For path parameters, use the exact name from the route template
+            // For query parameters, use camelCase
+            var parameterName = param.Source == ParameterSource.Route
+                ? GetMatchingRouteParameterName(param.Name, routeParams) ?? param.Name
+                : ToCamelCase(param.Name);
+
             parameters.Add(new ParameterDefinition(
-                ToCamelCase(param.Name),
+                parameterName,
                 location,
                 description: null,
                 required: param.Source == ParameterSource.Route || !param.IsOptional,
@@ -151,12 +158,24 @@ public class ServiceProxySwaggerGenerator
         return parameters;
     }
 
+    private static string? GetMatchingRouteParameterName(string paramName, List<string> routeParams)
+    {
+        foreach (var routeParam in routeParams)
+        {
+            if (string.Equals(routeParam, paramName, StringComparison.OrdinalIgnoreCase))
+            {
+                return routeParam;
+            }
+        }
+        return null;
+    }
+
     private List<ParameterDefinition> ExpandRouteAndQueryParameters(
         ParameterDescriptor param,
-        string routeTemplate)
+        string routeTemplate,
+        List<string> routeParams)
     {
         var parameters = new List<ParameterDefinition>();
-        var routeParams = ExtractRouteParameterNames(routeTemplate);
 
         var properties = param.Type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
             .Where(p => p.CanRead && p.GetIndexParameters().Length == 0);
@@ -164,14 +183,23 @@ public class ServiceProxySwaggerGenerator
         foreach (var prop in properties)
         {
             var propName = prop.Name;
-            var isRouteParam = routeParams.Contains(propName, StringComparer.OrdinalIgnoreCase);
+
+            // Check if this property maps to a route parameter (case-insensitive)
+            // and get the original route parameter name for path parameters
+            var matchingRouteParam = GetMatchingRouteParameterName(propName, routeParams);
+
+            var isRouteParam = matchingRouteParam != null;
             var location = isRouteParam ? ParameterLocation.Path : ParameterLocation.Query;
+
+            // For path parameters, use the exact name from the route template
+            // For query parameters, use camelCase
+            var parameterName = isRouteParam ? matchingRouteParam! : ToCamelCase(propName);
 
             var schema = _schemaGenerator.GenerateSchema(prop.PropertyType);
             var isRequired = isRouteParam || IsPropertyRequired(prop);
 
             parameters.Add(new ParameterDefinition(
-                ToCamelCase(propName),
+                parameterName,
                 location,
                 description: null,
                 required: isRequired,
@@ -181,9 +209,9 @@ public class ServiceProxySwaggerGenerator
         return parameters;
     }
 
-    private static HashSet<string> ExtractRouteParameterNames(string routeTemplate)
+    private static List<string> ExtractRouteParameterNamesWithOriginalCase(string routeTemplate)
     {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
         var regex = new System.Text.RegularExpressions.Regex(@"\{(\w+)(?::[^}]+)?\}");
         var matches = regex.Matches(routeTemplate);
 
