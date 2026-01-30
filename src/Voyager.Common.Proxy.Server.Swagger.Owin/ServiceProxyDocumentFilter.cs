@@ -211,17 +211,9 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
 
     private static Schema ConvertToSwaggerSchema(SchemaDefinition schema, SchemaRegistry schemaRegistry)
     {
-        // Handle reference
-        if (schema.IsReference)
-        {
-            return new Schema
-            {
-                @ref = schema.Reference
-            };
-        }
-
-        // If we have a CLR type and it's complex, try to use SchemaRegistry
-        if (schema.ClrType != null && !IsPrimitiveType(schema.ClrType))
+        // If we have a CLR type and it's complex, use SchemaRegistry to generate proper schema
+        // This ensures Swagger-Net properly understands and displays the model structure
+        if (schema.ClrType != null && !IsPrimitiveType(schema.ClrType) && !IsCollectionType(schema.ClrType))
         {
             try
             {
@@ -231,6 +223,16 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
             {
                 // Fallback to manual schema generation
             }
+        }
+
+        // Handle reference - convert from OpenAPI 3.0 format to Swagger 2.0 format
+        if (schema.IsReference)
+        {
+            var refName = schema.GetReferenceName();
+            return new Schema
+            {
+                @ref = $"#/definitions/{refName}"
+            };
         }
 
         var swaggerSchema = new Schema
@@ -285,6 +287,20 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
                type == typeof(TimeSpan) ||
                type == typeof(Guid) ||
                type.IsEnum;
+    }
+
+    private static bool IsCollectionType(Type type)
+    {
+        if (type.IsArray) return true;
+        if (!type.IsGenericType) return false;
+
+        var genericDef = type.GetGenericTypeDefinition();
+        return genericDef == typeof(IEnumerable<>) ||
+               genericDef == typeof(ICollection<>) ||
+               genericDef == typeof(IList<>) ||
+               genericDef == typeof(List<>) ||
+               genericDef == typeof(IReadOnlyList<>) ||
+               genericDef == typeof(IReadOnlyCollection<>);
     }
 
     private static string ConvertParameterLocation(Core.Models.ParameterLocation location)

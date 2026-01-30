@@ -2,7 +2,10 @@ namespace Voyager.Common.Proxy.Server.Owin;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Threading.Tasks;
+using Voyager.Common.Proxy.Server.Abstractions;
 using Voyager.Common.Proxy.Server.Core;
 
 // OWIN delegate type alias
@@ -22,6 +25,7 @@ internal sealed class ServiceProxyMiddleware<TService>
     private readonly EndpointMatcher _matcher;
     private readonly RequestDispatcher _dispatcher;
     private readonly Func<TService> _serviceFactory;
+    private readonly Dictionary<EndpointDescriptor, AuthorizationInfo> _authorizationCache;
 
     /// <summary>
     /// Creates a new instance of the service proxy middleware.
@@ -38,6 +42,7 @@ internal sealed class ServiceProxyMiddleware<TService>
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _serviceFactory = serviceFactory ?? throw new ArgumentNullException(nameof(serviceFactory));
         _dispatcher = new RequestDispatcher();
+        _authorizationCache = new Dictionary<EndpointDescriptor, AuthorizationInfo>();
     }
 
     /// <summary>
@@ -58,6 +63,16 @@ internal sealed class ServiceProxyMiddleware<TService>
             return;
         }
 
+        // Check authorization
+        var authInfo = GetAuthorizationInfo(endpoint);
+        var authResult = AuthorizationChecker.CheckAuthorization(environment, authInfo);
+
+        if (!authResult.Succeeded)
+        {
+            await WriteAuthorizationFailureResponse(environment, authResult).ConfigureAwait(false);
+            return;
+        }
+
         var service = _serviceFactory();
         var requestContext = new OwinRequestContext(environment, routeValues);
         var responseWriter = new OwinResponseWriter(environment);
@@ -71,4 +86,39 @@ internal sealed class ServiceProxyMiddleware<TService>
     /// </summary>
     /// <returns>The middleware AppFunc delegate.</returns>
     public AppFunc ToAppFunc() => Invoke;
+
+    private AuthorizationInfo GetAuthorizationInfo(EndpointDescriptor endpoint)
+    {
+        if (!_authorizationCache.TryGetValue(endpoint, out var authInfo))
+        {
+            authInfo = AuthorizationChecker.GetAuthorizationInfo(endpoint);
+            _authorizationCache[endpoint] = authInfo;
+        }
+        return authInfo;
+    }
+
+    private static async Task WriteAuthorizationFailureResponse(
+        IDictionary<string, object> environment,
+        AuthorizationResult authResult)
+    {
+        var statusCode = authResult.IsUnauthorized ? 401 : 403;
+        var reasonPhrase = authResult.IsUnauthorized ? "Unauthorized" : "Forbidden";
+
+        environment["owin.ResponseStatusCode"] = statusCode;
+        environment["owin.ResponseReasonPhrase"] = reasonPhrase;
+
+        var headers = environment["owin.ResponseHeaders"] as IDictionary<string, string[]>;
+        if (headers != null)
+        {
+            headers["Content-Type"] = new[] { "application/json; charset=utf-8" };
+        }
+
+        var responseBody = environment["owin.ResponseBody"] as Stream;
+        if (responseBody != null)
+        {
+            var json = $"{{\"error\":\"{authResult.FailureReason}\"}}";
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await responseBody.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+        }
+    }
 }
