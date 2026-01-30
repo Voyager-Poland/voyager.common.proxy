@@ -112,6 +112,110 @@ public void Configuration(IAppBuilder app)
 
 > **Note:** Policy-based authorization is an ASP.NET Core feature and is not fully supported in OWIN. When policies are specified, the middleware only checks if the user is authenticated.
 
+## Permission Checking
+
+For fine-grained permission control, use the options-based configuration with a permission checker. This runs **before** each method invocation:
+
+```csharp
+// Simple inline permission checking
+app.Use(ServiceProxyOwinMiddleware.Create<IVIPService>(options =>
+{
+    options.ServiceFactory = () => container.Resolve<IVIPService>();
+    options.PermissionChecker = async ctx =>
+    {
+        if (ctx.User?.Identity?.IsAuthenticated != true)
+            return PermissionResult.Unauthenticated();
+
+        // Check based on method and parameters
+        if (ctx.Method.Name == "DeleteAsync" && !ctx.User.IsInRole("Admin"))
+            return PermissionResult.Denied("Admin role required");
+
+        return PermissionResult.Granted();
+    };
+}));
+```
+
+### Context-Aware Factory
+
+When your service needs access to the request context (e.g., to inject per-request identity):
+
+```csharp
+app.Use(ServiceProxyOwinMiddleware.Create<IVIPService>(options =>
+{
+    options.ContextAwareFactory = env =>
+    {
+        var user = env["server.User"] as ClaimsPrincipal;
+        var identity = PilotIdentityFactory.Create(user);
+        return new VIPService(identity, actionModule);
+    };
+    options.PermissionChecker = async ctx =>
+    {
+        // Permission logic here
+        return PermissionResult.Granted();
+    };
+}));
+```
+
+### Typed Permission Checker
+
+For complex scenarios, implement `IServicePermissionChecker<TService>`:
+
+```csharp
+public class VIPServicePermissionChecker : IServicePermissionChecker<IVIPService>
+{
+    private readonly ActionModule _actionModule;
+
+    public VIPServicePermissionChecker(ActionModule actionModule)
+    {
+        _actionModule = actionModule;
+    }
+
+    public async Task<PermissionResult> CheckPermissionAsync(PermissionContext context)
+    {
+        var identity = PilotIdentity.FromPrincipal(context.User);
+        var action = _actionModule.GetActionForMethod(context.Method.Name);
+
+        // Use existing Action pattern for permission checking
+        var result = await action.CheckPermissionsOnlyAsync(
+            BuildRequest(context.Parameters), identity);
+
+        return result.IsSuccess
+            ? PermissionResult.Granted()
+            : PermissionResult.Denied(result.Error.Message);
+    }
+}
+
+// Usage
+app.Use(ServiceProxyOwinMiddleware.Create<IVIPService>(options =>
+{
+    options.ServiceFactory = () => container.Resolve<IVIPService>();
+    options.PermissionCheckerInstance = container.Resolve<VIPServicePermissionChecker>();
+}));
+```
+
+### PermissionContext
+
+The permission checker receives a `PermissionContext` with:
+
+| Property | Description |
+|----------|-------------|
+| `User` | The authenticated `IPrincipal` (may be null) |
+| `ServiceType` | The service interface type |
+| `Method` | The `MethodInfo` being invoked |
+| `Endpoint` | The `EndpointDescriptor` with route info |
+| `Parameters` | Dictionary of parameter name to deserialized value |
+| `RawContext` | The OWIN environment dictionary |
+
+### PermissionResult
+
+Return values from permission checker:
+
+```csharp
+PermissionResult.Granted()              // Allow the request
+PermissionResult.Denied("reason")       // 403 Forbidden
+PermissionResult.Unauthenticated()      // 401 Unauthorized
+```
+
 ## OWIN Compatibility
 
 This package uses raw OWIN delegate signatures instead of `IAppBuilder` extensions for maximum compatibility with SDK-style projects. The middleware factory returns a standard OWIN middleware wrapper:

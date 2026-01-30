@@ -1,12 +1,14 @@
 namespace Voyager.Common.Proxy.Server.AspNetCore;
 
 using System.Reflection;
+using System.Security.Principal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Voyager.Common.Proxy.Abstractions;
+using Voyager.Common.Proxy.Server.Abstractions;
 using Voyager.Common.Proxy.Server.Core;
 using ProxyAllowAnonymous = Voyager.Common.Proxy.Abstractions.AllowAnonymousAttribute;
 using AspNetAllowAnonymous = Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute;
@@ -30,7 +32,7 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
     public static IEndpointRouteBuilder MapServiceProxy<TService>(this IEndpointRouteBuilder endpoints)
         where TService : class
     {
-        return MapServiceProxy<TService>(endpoints, _ => { });
+        return MapServiceProxy<TService>(endpoints, (Action<IEndpointConventionBuilder>)(_ => { }));
     }
 
     /// <summary>
@@ -90,6 +92,178 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
         }
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Maps all methods from a service interface as HTTP endpoints with full options including permission checking.
+    /// </summary>
+    /// <typeparam name="TService">The service interface type.</typeparam>
+    /// <param name="endpoints">The endpoint route builder.</param>
+    /// <param name="configureOptions">A delegate to configure the service proxy options.</param>
+    /// <returns>The endpoint route builder for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// // Simple permission checking with inline callback
+    /// app.MapServiceProxy&lt;IVIPService&gt;(options =>
+    /// {
+    ///     options.PermissionChecker = async ctx =>
+    ///     {
+    ///         if (ctx.User?.Identity?.IsAuthenticated != true)
+    ///             return PermissionResult.Unauthenticated();
+    ///
+    ///         var identity = PilotIdentity.FromPrincipal(ctx.User);
+    ///         var checker = ((HttpContext)ctx.RawContext).RequestServices
+    ///             .GetRequiredService&lt;IVIPPermissionChecker&gt;();
+    ///         return await checker.CheckAsync(identity, ctx.Method.Name);
+    ///     };
+    /// });
+    ///
+    /// // Context-aware factory with permission checking
+    /// app.MapServiceProxy&lt;IVIPService&gt;(options =>
+    /// {
+    ///     options.ContextAwareFactory = httpContext =>
+    ///     {
+    ///         var identity = pilotIdentityFactory.Create(httpContext.User);
+    ///         return new VIPService(identity);
+    ///     };
+    ///     options.PermissionChecker = async ctx => PermissionResult.Granted();
+    /// });
+    /// </code>
+    /// </example>
+    public static IEndpointRouteBuilder MapServiceProxy<TService>(
+        this IEndpointRouteBuilder endpoints,
+        Action<ServiceProxyOptions<TService>> configureOptions)
+        where TService : class
+    {
+        return MapServiceProxy<TService>(endpoints, configureOptions, _ => { });
+    }
+
+    /// <summary>
+    /// Maps all methods from a service interface as HTTP endpoints with full options and endpoint configuration.
+    /// </summary>
+    /// <typeparam name="TService">The service interface type.</typeparam>
+    /// <param name="endpoints">The endpoint route builder.</param>
+    /// <param name="configureOptions">A delegate to configure the service proxy options.</param>
+    /// <param name="configureEndpoints">A delegate to configure endpoint conventions.</param>
+    /// <returns>The endpoint route builder for chaining.</returns>
+    public static IEndpointRouteBuilder MapServiceProxy<TService>(
+        this IEndpointRouteBuilder endpoints,
+        Action<ServiceProxyOptions<TService>> configureOptions,
+        Action<IEndpointConventionBuilder> configureEndpoints)
+        where TService : class
+    {
+        var options = new ServiceProxyOptions<TService>();
+        configureOptions(options);
+        options.Validate();
+
+        var serviceType = typeof(TService);
+        var scanner = new ServiceScanner();
+        var descriptors = scanner.ScanInterface<TService>();
+        var dispatcher = new RequestDispatcher();
+        var parameterBinder = new ParameterBinder();
+
+        // Get interface-level authorization attributes
+        var interfaceAuthAttributes = GetAuthorizationData(serviceType);
+
+        // Get permission checker (may be null)
+        var permissionChecker = options.GetEffectivePermissionChecker();
+
+        foreach (var descriptor in descriptors)
+        {
+            var currentDescriptor = descriptor; // Capture for closure
+
+            var builder = endpoints.MapMethods(
+                descriptor.RouteTemplate,
+                new[] { descriptor.HttpMethod },
+                async (HttpContext context) =>
+                {
+                    // Step 1: Permission checking (if configured)
+                    if (permissionChecker != null)
+                    {
+                        var requestContext = new AspNetCoreRequestContext(context);
+
+                        // Bind parameters for permission context
+                        var parameterValues = await parameterBinder.BindParametersAsync(
+                            requestContext, currentDescriptor);
+                        var parameterDict = BuildParameterDictionary(currentDescriptor, parameterValues);
+
+                        var permissionContext = new PermissionContext(
+                            user: context.User,
+                            serviceType: currentDescriptor.ServiceType,
+                            method: currentDescriptor.Method,
+                            endpoint: currentDescriptor,
+                            parameters: parameterDict,
+                            rawContext: context);
+
+                        var permissionResult = await permissionChecker(permissionContext);
+
+                        if (!permissionResult.IsGranted)
+                        {
+                            await WritePermissionFailureResponse(context, permissionResult);
+                            return;
+                        }
+                    }
+
+                    // Step 2: Create service and dispatch
+                    var service = options.CreateService(context);
+                    var reqContext = new AspNetCoreRequestContext(context);
+                    var responseWriter = new AspNetCoreResponseWriter(context.Response);
+
+                    await dispatcher.DispatchAsync(reqContext, responseWriter, currentDescriptor, service);
+                });
+
+            // Add metadata for OpenAPI/Swagger
+            builder.WithMetadata(new ServiceProxyEndpointMetadata(
+                descriptor.ServiceType,
+                descriptor.Method,
+                descriptor.ReturnType,
+                descriptor.ResultValueType));
+
+            // Apply authorization from attributes
+            ApplyAuthorization(builder, descriptor.Method, interfaceAuthAttributes);
+
+            configureEndpoints(builder);
+        }
+
+        return endpoints;
+    }
+
+    private static Dictionary<string, object?> BuildParameterDictionary(
+        EndpointDescriptor endpoint,
+        object?[] parameterValues)
+    {
+        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < endpoint.Parameters.Count && i < parameterValues.Length; i++)
+        {
+            var param = endpoint.Parameters[i];
+            // Skip CancellationToken parameters
+            if (param.Source != ParameterSource.CancellationToken)
+            {
+                dict[param.Name] = parameterValues[i];
+            }
+        }
+
+        return dict;
+    }
+
+    private static async Task WritePermissionFailureResponse(
+        HttpContext context,
+        PermissionResult permissionResult)
+    {
+        var statusCode = permissionResult.IsAuthenticationFailure ? 401 : 403;
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json; charset=utf-8";
+
+        var errorMessage = permissionResult.DenialReason ?? "Permission denied";
+        // Escape for JSON
+        errorMessage = errorMessage
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r");
+
+        await context.Response.WriteAsync($"{{\"error\":\"{errorMessage}\"}}");
     }
 
     private static void ApplyAuthorization(
