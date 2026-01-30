@@ -53,8 +53,64 @@ This generates the following endpoints:
 - **Convention-based routing** matching `Voyager.Common.Proxy.Client`
 - **Parameter binding** from route, query string, and request body
 - **Result\<T\> support** - automatically unwraps successful results or returns appropriate error responses
+- **Authorization support** - `[RequireAuthorization]` and `[AllowAnonymous]` attributes
 - **Raw OWIN signatures** - uses `Func<IDictionary<string, object>, Task>` for maximum compatibility
 - **Works with any OWIN host** - Katana, Microsoft.Owin, custom hosts
+
+## Authorization
+
+The middleware supports authorization using `[RequireAuthorization]` and `[AllowAnonymous]` attributes:
+
+```csharp
+// Require authorization for all methods
+[RequireAuthorization]
+public interface IUserService
+{
+    Task<Result<User>> GetUserAsync(int id);
+    Task<Result<User>> CreateUserAsync(CreateUserRequest request);
+
+    // Allow anonymous access to this method
+    [AllowAnonymous]
+    Task<Result<User>> GetPublicProfileAsync(int id);
+}
+
+// Require specific roles
+[RequireAuthorization(Roles = "Admin,Manager")]
+public interface IAdminService
+{
+    Task<Result> DeleteUserAsync(int id);
+}
+```
+
+The middleware checks the OWIN environment for the authenticated user:
+- `server.User`
+- `owin.User`
+- `Microsoft.Owin.Security.User` (Katana)
+
+### Authorization Responses
+
+- **401 Unauthorized** - User is not authenticated
+- **403 Forbidden** - User is authenticated but doesn't have required role(s)
+
+### OWIN Authentication Setup
+
+Make sure authentication middleware runs before the service proxy middleware:
+
+```csharp
+public void Configuration(IAppBuilder app)
+{
+    // Authentication middleware first
+    app.UseCookieAuthentication(new CookieAuthenticationOptions
+    {
+        AuthenticationType = DefaultAuthenticationTypes.ApplicationCookie
+    });
+
+    // Then service proxy
+    app.Use(ServiceProxyOwinMiddleware.Create<IUserService>(factory));
+}
+```
+
+> **Note:** Policy-based authorization is an ASP.NET Core feature and is not fully supported in OWIN. When policies are specified, the middleware only checks if the user is authenticated.
 
 ## OWIN Compatibility
 
