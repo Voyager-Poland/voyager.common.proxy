@@ -209,14 +209,23 @@ The following types can be bound from route or query string:
 
 ### HTTP Status to Result Mapping
 
-| HTTP Status | Result |
-|-------------|--------|
-| 200 OK | `Result.Success(value)` |
-| 204 No Content | `Result.Success()` |
-| 400 Bad Request | `Result.Failure(Error.ValidationError(...))` |
-| 401 Unauthorized | `Result.Failure(Error.UnauthorizedError(...))` |
-| 404 Not Found | `Result.Failure(Error.NotFoundError(...))` |
-| 5xx | `Result.Failure(Error.UnexpectedError(...))` |
+| HTTP Status | Result | Transient? |
+|-------------|--------|------------|
+| 200 OK | `Result.Success(value)` | - |
+| 204 No Content | `Result.Success()` | - |
+| 400 Bad Request | `Error.ValidationError(...)` | No |
+| 401 Unauthorized | `Error.UnauthorizedError(...)` | No |
+| 403 Forbidden | `Error.PermissionError(...)` | No |
+| 404 Not Found | `Error.NotFoundError(...)` | No |
+| 408 Request Timeout | `Error.TimeoutError(...)` | Yes |
+| 409 Conflict | `Error.ConflictError(...)` | No |
+| 429 Too Many Requests | `Error.TooManyRequestsError(...)` | Yes |
+| 502 Bad Gateway | `Error.UnavailableError(...)` | Yes |
+| 503 Service Unavailable | `Error.UnavailableError(...)` | Yes |
+| 504 Gateway Timeout | `Error.TimeoutError(...)` | Yes |
+| 500, other 5xx | `Error.UnexpectedError(...)` | No |
+
+Transient errors can be retried with exponential backoff. Use `error.Type.IsTransient()` to check.
 
 ## Custom Routes with Attributes
 
@@ -383,7 +392,8 @@ public interface IOrderService
 
 ## Dependencies
 
-- **Voyager.Common.Results** - Result pattern for error handling (required)
+- **Voyager.Common.Results** (>= 1.7.0) - Result pattern and error classification
+- **Voyager.Common.Resilience** (>= 1.7.0) - Circuit breaker for client proxies
 - **Microsoft.Extensions.Http** - HttpClientFactory integration (client)
 - **Castle.Core** - Dynamic proxy for .NET Framework 4.8 (client, net48 only)
 

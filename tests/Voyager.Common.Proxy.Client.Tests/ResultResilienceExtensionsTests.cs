@@ -3,20 +3,23 @@ namespace Voyager.Common.Proxy.Client.Tests;
 using FluentAssertions;
 using Voyager.Common.Proxy.Client.Extensions;
 using Voyager.Common.Results;
+using Voyager.Common.Results.Extensions;
 using Xunit;
 
 public class ResultResilienceExtensionsTests
 {
-    #region IsTransient Tests
+    #region IsTransient Tests (using Voyager.Common.Results.Extensions)
 
     [Theory]
     [InlineData(ErrorType.Unavailable)]
     [InlineData(ErrorType.Timeout)]
+    [InlineData(ErrorType.TooManyRequests)]
+    [InlineData(ErrorType.CircuitBreakerOpen)]
     public void IsTransient_TransientErrorTypes_ReturnsTrue(ErrorType errorType)
     {
         var error = CreateError(errorType);
 
-        error.IsTransient().Should().BeTrue();
+        error.Type.IsTransient().Should().BeTrue();
     }
 
     [Theory]
@@ -33,23 +36,24 @@ public class ResultResilienceExtensionsTests
     {
         var error = CreateError(errorType);
 
-        error.IsTransient().Should().BeFalse();
+        error.Type.IsTransient().Should().BeFalse();
     }
 
     #endregion
 
-    #region IsInfrastructureFailure Tests
+    #region ShouldCountForCircuitBreaker Tests (using Voyager.Common.Results.Extensions)
 
     [Theory]
     [InlineData(ErrorType.Unavailable)]
     [InlineData(ErrorType.Timeout)]
+    [InlineData(ErrorType.TooManyRequests)]
     [InlineData(ErrorType.Database)]
     [InlineData(ErrorType.Unexpected)]
-    public void IsInfrastructureFailure_InfrastructureErrorTypes_ReturnsTrue(ErrorType errorType)
+    public void ShouldCountForCircuitBreaker_InfrastructureErrorTypes_ReturnsTrue(ErrorType errorType)
     {
         var error = CreateError(errorType);
 
-        error.IsInfrastructureFailure().Should().BeTrue();
+        error.Type.ShouldCountForCircuitBreaker().Should().BeTrue();
     }
 
     [Theory]
@@ -60,11 +64,12 @@ public class ResultResilienceExtensionsTests
     [InlineData(ErrorType.Conflict)]
     [InlineData(ErrorType.Business)]
     [InlineData(ErrorType.Cancelled)]
-    public void IsInfrastructureFailure_BusinessErrorTypes_ReturnsFalse(ErrorType errorType)
+    [InlineData(ErrorType.CircuitBreakerOpen)] // CB doesn't count itself
+    public void ShouldCountForCircuitBreaker_BusinessErrorTypes_ReturnsFalse(ErrorType errorType)
     {
         var error = CreateError(errorType);
 
-        error.IsInfrastructureFailure().Should().BeFalse();
+        error.Type.ShouldCountForCircuitBreaker().Should().BeFalse();
     }
 
     #endregion
@@ -346,6 +351,8 @@ public class ResultResilienceExtensionsTests
             ErrorType.Timeout => Error.TimeoutError("Test"),
             ErrorType.Unavailable => Error.UnavailableError("Test"),
             ErrorType.Unexpected => Error.UnexpectedError("Test"),
+            ErrorType.TooManyRequests => Error.TooManyRequestsError("Test"),
+            ErrorType.CircuitBreakerOpen => Error.CircuitBreakerOpenError("Test"),
             _ => Error.UnexpectedError("Unknown")
         };
     }

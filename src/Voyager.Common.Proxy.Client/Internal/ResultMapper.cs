@@ -152,7 +152,7 @@ namespace Voyager.Common.Proxy.Client.Internal
 
                 // Transient errors - retry, circuit breaker counts
                 HttpStatusCode.RequestTimeout => Error.TimeoutError(message),           // 408
-                (HttpStatusCode)429 => Error.UnavailableError(message),                 // TooManyRequests
+                (HttpStatusCode)429 => Error.TooManyRequestsError(message),             // 429 TooManyRequests
                 HttpStatusCode.BadGateway => Error.UnavailableError(message),           // 502
                 HttpStatusCode.ServiceUnavailable => Error.UnavailableError(message),   // 503
                 HttpStatusCode.GatewayTimeout => Error.TimeoutError(message),           // 504

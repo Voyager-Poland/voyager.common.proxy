@@ -6,6 +6,8 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Voyager.Common.Proxy.Server.Abstractions;
+using Voyager.Common.Results;
+using Voyager.Common.Results.Extensions;
 
 /// <summary>
 /// Adapts the OWIN environment dictionary to IResponseWriter.
@@ -91,41 +93,23 @@ internal sealed class OwinResponseWriter : IResponseWriter
     }
 
     /// <summary>
-    /// Maps ErrorType to HTTP status code according to ADR-007.
+    /// Maps ErrorType string to HTTP status code using centralized classification.
     /// </summary>
-    /// <remarks>
-    /// Classification:
-    /// - Transient (retryable by client): 408, 429, 503, 504
-    /// - Infrastructure (circuit breaker counts): 500, 503, 504, 408
-    /// - Business (no retry, CB ignores): 400, 401, 403, 404, 409
-    /// </remarks>
     private static int MapErrorTypeToStatusCode(string errorType)
     {
+        // Use centralized mapping from Voyager.Common.Results.Extensions
+        if (Enum.TryParse<ErrorType>(errorType, ignoreCase: true, out var type))
+        {
+            return type.ToHttpStatusCode();
+        }
+
+        // Legacy string mappings for backward compatibility
         return errorType switch
         {
-            // Business errors - no retry, circuit breaker ignores
-            "Validation" => 400,
-            "Business" => 400,
-            "NotFound" => 404,
-            "Unauthorized" => 401,
-            "Permission" => 403,
             "Forbidden" => 403,
-            "Conflict" => 409,
-            "Cancelled" => 499, // Client Closed Request (nginx convention)
-
-            // Transient errors - client may retry, circuit breaker counts
-            "Timeout" => 504,
-            "Unavailable" => 503,
-            "CircuitBreakerOpen" => 503,
-            "TooManyRequests" => 429,
-            "ServiceUnavailable" => 503,
-
-            // Infrastructure errors - no retry, but circuit breaker counts
-            "Database" => 500,
-            "Unexpected" => 500,
             "Internal" => 500,
+            "ServiceUnavailable" => 503,
             "NotImplemented" => 501,
-
             _ => 500
         };
     }

@@ -3,6 +3,7 @@ namespace Voyager.Common.Proxy.Client.Extensions
     using System;
     using System.Threading.Tasks;
     using Voyager.Common.Results;
+    using Voyager.Common.Results.Extensions;
 
     /// <summary>
     /// Retry policy delegate for Result-based operations.
@@ -162,11 +163,8 @@ namespace Voyager.Common.Proxy.Client.Extensions
         {
             return (attempt, error) =>
             {
-                // Only retry transient errors
-                bool isTransient = error.Type == ErrorType.Unavailable
-                                || error.Type == ErrorType.Timeout;
-
-                if (attempt >= maxAttempts || !isTransient)
+                // Only retry transient errors (using centralized classification from Voyager.Common.Results)
+                if (attempt >= maxAttempts || !error.Type.IsTransient())
                     return Result<int>.Failure(error);
 
                 // Exponential backoff
@@ -211,14 +209,12 @@ namespace Voyager.Common.Proxy.Client.Extensions
         /// <param name="error">The error to check</param>
         /// <returns>True if the error is transient</returns>
         /// <remarks>
-        /// According to ADR-007, transient errors are:
-        /// - Unavailable: Service temporarily down, network issues, 429/502/503
-        /// - Timeout: Operation exceeded time limit, 408/504
+        /// Use error.Type.IsTransient() from Voyager.Common.Results.Extensions instead.
         /// </remarks>
+        [Obsolete("Use error.Type.IsTransient() from Voyager.Common.Results.Extensions instead.")]
         public static bool IsTransient(this Error error)
         {
-            return error.Type == ErrorType.Unavailable
-                || error.Type == ErrorType.Timeout;
+            return error.Type.IsTransient();
         }
 
         /// <summary>
@@ -227,19 +223,12 @@ namespace Voyager.Common.Proxy.Client.Extensions
         /// <param name="error">The error to check</param>
         /// <returns>True if the error is an infrastructure failure</returns>
         /// <remarks>
-        /// According to ADR-007, infrastructure errors are:
-        /// - Unavailable, Timeout (transient)
-        /// - Database, Unexpected (infrastructure but not retryable)
-        ///
-        /// Business/validation errors are NOT counted:
-        /// - Validation, NotFound, Permission, Unauthorized, Conflict, Business, Cancelled
+        /// Use error.Type.ShouldCountForCircuitBreaker() from Voyager.Common.Results.Extensions instead.
         /// </remarks>
+        [Obsolete("Use error.Type.ShouldCountForCircuitBreaker() from Voyager.Common.Results.Extensions instead.")]
         public static bool IsInfrastructureFailure(this Error error)
         {
-            return error.Type == ErrorType.Unavailable
-                || error.Type == ErrorType.Timeout
-                || error.Type == ErrorType.Database
-                || error.Type == ErrorType.Unexpected;
+            return error.Type.ShouldCountForCircuitBreaker();
         }
     }
 }

@@ -10,6 +10,7 @@ namespace Voyager.Common.Proxy.Client.Internal
     using Voyager.Common.Proxy.Client.Abstractions;
     using Voyager.Common.Resilience;
     using Voyager.Common.Results;
+    using Voyager.Common.Results.Extensions;
 
     using ProxyHttpMethod = Voyager.Common.Proxy.Abstractions.HttpMethod;
 
@@ -146,7 +147,7 @@ namespace Voyager.Common.Proxy.Client.Internal
                 var error = GetErrorFromResult(lastResult, resultType);
 
                 // Only retry transient errors
-                if (!IsTransientError(error) || attempt >= maxAttempts)
+                if (error is null || !error.Type.IsTransient() || attempt >= maxAttempts)
                 {
                     await RecordResultForCircuitBreakerAsync(lastResult, resultType).ConfigureAwait(false);
                     return lastResult;
@@ -197,17 +198,6 @@ namespace Voyager.Common.Proxy.Client.Internal
                 return errorProperty.GetValue(result) as Error;
             }
             return null;
-        }
-
-        private static bool IsTransientError(Error? error)
-        {
-            if (error == null)
-            {
-                return false;
-            }
-
-            return error.Type == ErrorType.Unavailable
-                || error.Type == ErrorType.Timeout;
         }
 
         private async Task<object> ExecuteHttpRequestAsync(MethodInfo method, object?[] args, Type resultType)

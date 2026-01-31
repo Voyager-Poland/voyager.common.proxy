@@ -171,7 +171,7 @@ public class ResultMapperTests
     }
 
     [Fact]
-    public async Task MapResponseAsync_429TooManyRequests_ReturnsUnavailableError()
+    public async Task MapResponseAsync_429TooManyRequests_ReturnsTooManyRequestsError()
     {
         var response = CreateErrorResponse((HttpStatusCode)429, "Rate limited");
 
@@ -180,7 +180,7 @@ public class ResultMapperTests
         result.Should().BeOfType<Result<User>>();
         var typedResult = (Result<User>)result;
         typedResult.IsFailure.Should().BeTrue();
-        typedResult.Error!.Type.Should().Be(ErrorType.Unavailable);
+        typedResult.Error!.Type.Should().Be(ErrorType.TooManyRequests);
     }
 
     [Fact]

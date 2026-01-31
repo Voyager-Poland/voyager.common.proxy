@@ -3,6 +3,8 @@ namespace Voyager.Common.Proxy.Server.AspNetCore;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Voyager.Common.Proxy.Server.Abstractions;
+using Voyager.Common.Results;
+using Voyager.Common.Results.Extensions;
 
 /// <summary>
 /// Adapts ASP.NET Core HttpResponse to IResponseWriter.
@@ -45,41 +47,23 @@ internal sealed class AspNetCoreResponseWriter : IResponseWriter
     }
 
     /// <summary>
-    /// Maps ErrorType to HTTP status code according to ADR-007.
+    /// Maps ErrorType string to HTTP status code using centralized classification.
     /// </summary>
-    /// <remarks>
-    /// Classification:
-    /// - Transient (retryable by client): 408, 429, 503, 504
-    /// - Infrastructure (circuit breaker counts): 500, 503, 504, 408
-    /// - Business (no retry, CB ignores): 400, 401, 403, 404, 409
-    /// </remarks>
     private static int MapErrorTypeToStatusCode(string errorType)
     {
+        // Use centralized mapping from Voyager.Common.Results.Extensions
+        if (Enum.TryParse<ErrorType>(errorType, ignoreCase: true, out var type))
+        {
+            return type.ToHttpStatusCode();
+        }
+
+        // Legacy string mappings for backward compatibility
         return errorType switch
         {
-            // Business errors - no retry, circuit breaker ignores
-            "Validation" => StatusCodes.Status400BadRequest,
-            "Business" => StatusCodes.Status400BadRequest,
-            "NotFound" => StatusCodes.Status404NotFound,
-            "Unauthorized" => StatusCodes.Status401Unauthorized,
-            "Permission" => StatusCodes.Status403Forbidden,
             "Forbidden" => StatusCodes.Status403Forbidden,
-            "Conflict" => StatusCodes.Status409Conflict,
-            "Cancelled" => 499, // Client Closed Request (nginx convention)
-
-            // Transient errors - client may retry, circuit breaker counts
-            "Timeout" => StatusCodes.Status504GatewayTimeout,
-            "Unavailable" => StatusCodes.Status503ServiceUnavailable,
-            "CircuitBreakerOpen" => StatusCodes.Status503ServiceUnavailable,
-            "TooManyRequests" => StatusCodes.Status429TooManyRequests,
-            "ServiceUnavailable" => StatusCodes.Status503ServiceUnavailable,
-
-            // Infrastructure errors - no retry, but circuit breaker counts
-            "Database" => StatusCodes.Status500InternalServerError,
-            "Unexpected" => StatusCodes.Status500InternalServerError,
             "Internal" => StatusCodes.Status500InternalServerError,
+            "ServiceUnavailable" => StatusCodes.Status503ServiceUnavailable,
             "NotImplemented" => StatusCodes.Status501NotImplemented,
-
             _ => StatusCodes.Status500InternalServerError
         };
     }
