@@ -1,6 +1,6 @@
 # ADR-007: Strategia Resilience - Retry i Circuit Breaker
 
-**Status:** Zaakceptowane
+**Status:** Zaimplementowane
 **Data:** 2026-01-30
 **Autor:** [Do uzupełnienia]
 
