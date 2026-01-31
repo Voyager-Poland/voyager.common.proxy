@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking:** HTTP 429 now returns `ErrorType.TooManyRequests` instead of `ErrorType.Unavailable` (ADR-009)
-- Upgraded `Voyager.Common.Results` dependency to 1.7.0-preview.1
-- Upgraded `Voyager.Common.Resilience` dependency to 1.7.0-preview.1
+- Upgraded `Voyager.Common.Results` dependency to 1.7.0-preview.2
+- Upgraded `Voyager.Common.Resilience` dependency to 1.7.0-preview.2
 - `AspNetCoreResponseWriter` and `OwinResponseWriter` now use centralized `ErrorType.ToHttpStatusCode()` extension
 - `HttpMethodInterceptor` now uses `error.Type.IsTransient()` from `Voyager.Common.Results.Extensions`
 
@@ -29,3 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New error types supported: `TooManyRequests`, `CircuitBreakerOpen` in transient classification
 - Server projects now reference `Voyager.Common.Results` for centralized error handling
+- ADR-008: Diagnostics Strategy now uses callback APIs from Voyager.Common.Results/Resilience 1.7.0-preview.2:
+  - `CircuitBreakerPolicy.OnStateChanged` callback for circuit breaker state changes
+  - `BindWithRetryAsync(..., onRetryAttempt)` callback for retry attempt notifications

@@ -467,19 +467,12 @@ public sealed class ProxyEventSource : EventSource
 | `OnRequestStarting` | `ExecuteHttpRequestAsync()` - przed `_httpClient.SendAsync()` | Linia ~225 |
 | `OnRequestCompleted` | `ExecuteHttpRequestAsync()` - po `ResultMapper.MapResponseAsync()` | Linia ~242 |
 | `OnRequestFailed` | `ExecuteHttpRequestAsync()` - w bloku `catch` | Linie 243-258 |
-| `OnRetryAttempt` | `ExecuteWithRetryAsync()` - przed `Task.Delay()` | Linia ~157 (lub callback z 1.8.0) |
-| `OnCircuitBreakerStateChanged` | Wrapper wokół `CircuitBreakerPolicy` | Zobacz niżej |
+| `OnRetryAttempt` | Callback `onRetryAttempt` w `BindWithRetryAsync()` | Voyager.Common.Results 1.7.0-preview.2 |
+| `OnCircuitBreakerStateChanged` | Callback `OnStateChanged` w `CircuitBreakerPolicy` | Voyager.Common.Resilience 1.7.0-preview.2 |
 
-### Problem: Circuit Breaker State Changes
+### Rozwiązanie: Circuit Breaker State Changes
 
-`CircuitBreakerPolicy` jest w `Voyager.Common.Resilience` i **nie ma mechanizmu callbacków**.
-
-**Docelowe rozwiązanie (Voyager.Common.Results 1.8.0):**
-
-Zgłosiliśmy wymaganie dodania callbacków do `CircuitBreakerPolicy`:
-- [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md)
-
-Po implementacji w wersji 1.8.0 będzie można użyć bezpośrednio:
+Od wersji **Voyager.Common.Resilience 1.7.0-preview.2** dostępny jest callback `OnStateChanged`:
 
 ```csharp
 _circuitBreaker.OnStateChanged = (oldState, newState, failures, lastError) =>
@@ -497,7 +490,9 @@ _circuitBreaker.OnStateChanged = (oldState, newState, failures, lastError) =>
 };
 ```
 
-**Tymczasowe rozwiązanie (do wersji 1.8.0): ObservableCircuitBreaker wrapper**
+**Alternatywne rozwiązanie: ObservableCircuitBreaker wrapper**
+
+Dla starszych wersji biblioteki można użyć wrappera:
 
 ```csharp
 namespace Voyager.Common.Proxy.Client.Internal
@@ -580,16 +575,13 @@ namespace Voyager.Common.Proxy.Client.Internal
 }
 ```
 
-### Problem: Retry Attempt Callbacks
+### Rozwiązanie: Retry Attempt Callbacks
 
-Podobnie jak `CircuitBreakerPolicy`, metody `BindWithRetryAsync` nie mają mechanizmu powiadamiania o próbach retry.
+Od wersji **Voyager.Common.Results 1.7.0-preview.2** dostępny jest callback `onRetryAttempt` w `BindWithRetryAsync`:
 
-**Docelowe rozwiązanie (Voyager.Common.Results 1.8.0):**
-
-Zgłosiliśmy wymaganie dodania callbacków do `BindWithRetryAsync`:
 - [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md)
 
-Po implementacji w wersji 1.8.0 będzie można użyć:
+Użycie:
 
 ```csharp
 var result = await operation.BindWithRetryAsync(
@@ -829,6 +821,6 @@ services.AddProxyDiagnostics<SlackAlertingDiagnostics>();
 - [Application Insights](https://docs.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)
 - [OpenTelemetry .NET](https://opentelemetry.io/docs/instrumentation/net/)
 
-**Zależności od Voyager.Common.Results (wersja 1.8.0):**
-- [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md)
-- [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md)
+**Zależności od Voyager.Common.Results/Resilience (wersja 1.7.0-preview.2):**
+- [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md) - zaimplementowane
+- [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md) - zaimplementowane
