@@ -412,16 +412,338 @@ public sealed class ProxyEventSource : EventSource
 - Wymaga narzędzi ETW do analizy
 - Mniej elastyczne niż eventy
 
+## Punkty emisji zdarzeń
+
+### Kto wywołuje handlery?
+
+`HttpMethodInterceptor` jest odpowiedzialny za emitowanie wszystkich zdarzeń diagnostycznych:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        HttpMethodInterceptor                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  InterceptAsync()                                                        │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ExecuteWithResilienceAsync()                                            │
+│       │                                                                  │
+│       ├──▶ _circuitBreaker.ShouldAllowRequestAsync()                    │
+│       │         │                                                        │
+│       │         └──▶ [Stan CB się zmienił?] ──▶ OnCircuitBreakerStateChanged │
+│       │                                                                  │
+│       ▼                                                                  │
+│  ExecuteWithRetryAsync()  ◀─────────────────────────────┐               │
+│       │                                                  │               │
+│       ▼                                                  │               │
+│  ExecuteHttpRequestAsync()                               │               │
+│       │                                                  │               │
+│       ├──▶ OnRequestStarting ────────────────────────────┤               │
+│       │                                                  │               │
+│       ▼                                                  │               │
+│  [HTTP Call]                                             │               │
+│       │                                                  │               │
+│       ├── Success ──▶ OnRequestCompleted ────────────────┤               │
+│       │                                                  │               │
+│       └── Failure ──▶ OnRequestFailed ───────────────────┤               │
+│                       │                                  │               │
+│                       ├── IsTransient? ──▶ OnRetryAttempt│               │
+│                       │                      + delay     │               │
+│                       │                          │       │               │
+│                       │                          └───────┘  (retry loop) │
+│                       │                                                  │
+│                       └──▶ RecordResultForCircuitBreakerAsync()         │
+│                                   │                                      │
+│                                   └──▶ [Stan CB się zmienił?]           │
+│                                              ──▶ OnCircuitBreakerStateChanged │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Szczegóły emisji zdarzeń
+
+| Zdarzenie | Miejsce emisji | Kod |
+|-----------|----------------|-----|
+| `OnRequestStarting` | `ExecuteHttpRequestAsync()` - przed `_httpClient.SendAsync()` | Linia ~225 |
+| `OnRequestCompleted` | `ExecuteHttpRequestAsync()` - po `ResultMapper.MapResponseAsync()` | Linia ~242 |
+| `OnRequestFailed` | `ExecuteHttpRequestAsync()` - w bloku `catch` | Linie 243-258 |
+| `OnRetryAttempt` | `ExecuteWithRetryAsync()` - przed `Task.Delay()` | Linia ~157 (lub callback z 1.8.0) |
+| `OnCircuitBreakerStateChanged` | Wrapper wokół `CircuitBreakerPolicy` | Zobacz niżej |
+
+### Problem: Circuit Breaker State Changes
+
+`CircuitBreakerPolicy` jest w `Voyager.Common.Resilience` i **nie ma mechanizmu callbacków**.
+
+**Docelowe rozwiązanie (Voyager.Common.Results 1.8.0):**
+
+Zgłosiliśmy wymaganie dodania callbacków do `CircuitBreakerPolicy`:
+- [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md)
+
+Po implementacji w wersji 1.8.0 będzie można użyć bezpośrednio:
+
+```csharp
+_circuitBreaker.OnStateChanged = (oldState, newState, failures, lastError) =>
+{
+    foreach (var handler in _diagnostics)
+        handler.OnCircuitBreakerStateChanged(new CircuitBreakerStateChangedEvent
+        {
+            ServiceName = _serviceName,
+            OldState = oldState,
+            NewState = newState,
+            FailureCount = failures,
+            LastErrorType = lastError?.Type.ToString(),
+            LastErrorMessage = lastError?.Message
+        });
+};
+```
+
+**Tymczasowe rozwiązanie (do wersji 1.8.0): ObservableCircuitBreaker wrapper**
+
+```csharp
+namespace Voyager.Common.Proxy.Client.Internal
+{
+    /// <summary>
+    /// Wrapper around CircuitBreakerPolicy that tracks state changes
+    /// and emits diagnostic events.
+    /// </summary>
+    internal sealed class ObservableCircuitBreaker
+    {
+        private readonly CircuitBreakerPolicy _policy;
+        private readonly IEnumerable<IProxyDiagnostics> _diagnostics;
+        private readonly string _serviceName;
+        private CircuitState _lastKnownState;
+
+        public ObservableCircuitBreaker(
+            CircuitBreakerPolicy policy,
+            IEnumerable<IProxyDiagnostics> diagnostics,
+            string serviceName)
+        {
+            _policy = policy;
+            _diagnostics = diagnostics;
+            _serviceName = serviceName;
+            _lastKnownState = policy.State;
+        }
+
+        public async Task<Result<bool>> ShouldAllowRequestAsync()
+        {
+            var oldState = _policy.State;
+            var result = await _policy.ShouldAllowRequestAsync().ConfigureAwait(false);
+            CheckStateChange(oldState);
+            return result;
+        }
+
+        public async Task RecordSuccessAsync()
+        {
+            var oldState = _policy.State;
+            await _policy.RecordSuccessAsync().ConfigureAwait(false);
+            CheckStateChange(oldState);
+        }
+
+        public async Task RecordFailureAsync(Error error)
+        {
+            var oldState = _policy.State;
+            await _policy.RecordFailureAsync(error).ConfigureAwait(false);
+            CheckStateChange(oldState);
+        }
+
+        private void CheckStateChange(CircuitState oldState)
+        {
+            var newState = _policy.State;
+            if (oldState != newState)
+            {
+                var evt = new CircuitBreakerStateChangedEvent
+                {
+                    ServiceName = _serviceName,
+                    OldState = oldState,
+                    NewState = newState,
+                    FailureCount = _policy.FailureCount,
+                    LastErrorType = _policy.LastError?.Type.ToString(),
+                    LastErrorMessage = _policy.LastError?.Message
+                };
+
+                foreach (var handler in _diagnostics)
+                {
+                    try
+                    {
+                        handler.OnCircuitBreakerStateChanged(evt);
+                    }
+                    catch
+                    {
+                        // Diagnostics should never break the main flow
+                    }
+                }
+            }
+        }
+
+        public CircuitState State => _policy.State;
+    }
+}
+```
+
+### Problem: Retry Attempt Callbacks
+
+Podobnie jak `CircuitBreakerPolicy`, metody `BindWithRetryAsync` nie mają mechanizmu powiadamiania o próbach retry.
+
+**Docelowe rozwiązanie (Voyager.Common.Results 1.8.0):**
+
+Zgłosiliśmy wymaganie dodania callbacków do `BindWithRetryAsync`:
+- [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md)
+
+Po implementacji w wersji 1.8.0 będzie można użyć:
+
+```csharp
+var result = await operation.BindWithRetryAsync(
+    async _ => await ExecuteHttpRequestAsync(...),
+    _retryPolicy,
+    onRetryAttempt: (attempt, error, delayMs) =>
+    {
+        foreach (var handler in _diagnostics)
+            handler.OnRetryAttempt(new RetryAttemptEvent
+            {
+                ServiceName = _serviceName,
+                MethodName = methodName,
+                AttemptNumber = attempt,
+                ErrorType = error.Type.ToString(),
+                ErrorMessage = error.Message,
+                Delay = TimeSpan.FromMilliseconds(delayMs),
+                // ...
+            });
+    });
+```
+
+### Zmiany w HttpMethodInterceptor
+
+```csharp
+internal sealed class HttpMethodInterceptor : IMethodInterceptor
+{
+    private readonly IEnumerable<IProxyDiagnostics> _diagnostics;
+    private readonly ObservableCircuitBreaker? _circuitBreaker;  // Zamiast CircuitBreakerPolicy
+    private readonly string _serviceName;
+
+    // W ExecuteWithRetryAsync, przed Task.Delay:
+    private async Task<object> ExecuteWithRetryAsync(...)
+    {
+        // ... existing code ...
+
+        // Przed retry - emit event
+        var retryEvent = new RetryAttemptEvent
+        {
+            ServiceName = _serviceName,
+            MethodName = method.Name,
+            AttemptNumber = attempt,
+            MaxAttempts = maxAttempts,
+            Delay = TimeSpan.FromMilliseconds(delayMs),
+            ErrorType = error.Type.ToString(),
+            ErrorMessage = error.Message,
+            CorrelationId = GetCorrelationId()
+        };
+
+        EmitEvent(d => d.OnRetryAttempt(retryEvent));
+
+        await Task.Delay(delayMs).ConfigureAwait(false);
+    }
+
+    // W ExecuteHttpRequestAsync:
+    private async Task<object> ExecuteHttpRequestAsync(...)
+    {
+        var correlationId = GetCorrelationId();
+        var startTime = Stopwatch.GetTimestamp();
+
+        // Emit: Request Starting
+        EmitEvent(d => d.OnRequestStarting(new RequestStartingEvent
+        {
+            ServiceName = _serviceName,
+            MethodName = method.Name,
+            HttpMethod = httpMethod.ToString(),
+            Url = path,
+            CorrelationId = correlationId
+        }));
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var result = await ResultMapper.MapResponseAsync(...).ConfigureAwait(false);
+            var duration = GetElapsed(startTime);
+
+            // Emit: Request Completed
+            EmitEvent(d => d.OnRequestCompleted(new RequestCompletedEvent
+            {
+                ServiceName = _serviceName,
+                MethodName = method.Name,
+                HttpMethod = httpMethod.ToString(),
+                Url = path,
+                StatusCode = (int)response.StatusCode,
+                Duration = duration,
+                IsSuccess = IsSuccessResult(result, resultType),
+                CorrelationId = correlationId,
+                ErrorType = GetErrorFromResult(result, resultType)?.Type.ToString(),
+                ErrorMessage = GetErrorFromResult(result, resultType)?.Message
+            }));
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            var duration = GetElapsed(startTime);
+
+            // Emit: Request Failed
+            EmitEvent(d => d.OnRequestFailed(new RequestFailedEvent
+            {
+                ServiceName = _serviceName,
+                MethodName = method.Name,
+                HttpMethod = httpMethod.ToString(),
+                Url = path,
+                Duration = duration,
+                ExceptionType = ex.GetType().FullName!,
+                ExceptionMessage = ex.Message,
+                CorrelationId = correlationId
+            }));
+
+            // ... existing exception handling ...
+        }
+    }
+
+    private void EmitEvent(Action<IProxyDiagnostics> action)
+    {
+        foreach (var handler in _diagnostics)
+        {
+            try
+            {
+                action(handler);
+            }
+            catch
+            {
+                // Diagnostics should never break the main flow
+            }
+        }
+    }
+
+    private static Guid GetCorrelationId()
+    {
+        // Use Activity if available (OpenTelemetry), otherwise generate new
+        if (Activity.Current != null)
+        {
+            return Guid.TryParse(Activity.Current.TraceId.ToString(), out var traceId)
+                ? traceId
+                : Guid.NewGuid();
+        }
+        return Guid.NewGuid();
+    }
+}
+```
+
 ## Implementacja
 
 ### Faza 1: Core Events
 
 - [ ] Utworzenie `Voyager.Common.Proxy.Diagnostics` namespace
 - [ ] Definicja `IProxyDiagnostics` interfejsu
+- [ ] Definicja `ProxyDiagnosticsHandler` klasy abstrakcyjnej
 - [ ] Definicja event records
-- [ ] `NullProxyDiagnostics` (domyślny)
-- [ ] Integracja z `HttpMethodInterceptor`
-- [ ] Integracja z circuit breaker
+- [ ] `NullProxyDiagnostics` (domyślny, singleton)
+- [ ] `ObservableCircuitBreaker` wrapper
+- [ ] Integracja z `HttpMethodInterceptor` - emisja zdarzeń
+- [ ] Przekazywanie `IEnumerable<IProxyDiagnostics>` przez DI
 
 ### Faza 2: Wbudowane Handlery
 
@@ -502,6 +824,11 @@ services.AddProxyDiagnostics<SlackAlertingDiagnostics>();
 
 **Powiązane dokumenty:**
 - [ADR-007: Resilience Strategy](./ADR-007-Resilience-Strategy.md)
+- [ADR-009: Upgrade do Results 1.7.0](./ADR-009-Upgrade-Results-1.7.0.md)
 - [Microsoft.Extensions.Logging](https://docs.microsoft.com/en-us/dotnet/core/extensions/logging)
 - [Application Insights](https://docs.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)
 - [OpenTelemetry .NET](https://opentelemetry.io/docs/instrumentation/net/)
+
+**Zależności od Voyager.Common.Results (wersja 1.8.0):**
+- [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md)
+- [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md)
