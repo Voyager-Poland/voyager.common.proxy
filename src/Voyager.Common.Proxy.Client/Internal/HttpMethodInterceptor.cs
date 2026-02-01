@@ -1,6 +1,8 @@
 namespace Voyager.Common.Proxy.Client.Internal
 {
     using System;
+    using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Net.Http;
     using System.Reflection;
     using System.Text;
@@ -8,6 +10,8 @@ namespace Voyager.Common.Proxy.Client.Internal
     using System.Threading;
     using System.Threading.Tasks;
     using Voyager.Common.Proxy.Client.Abstractions;
+    using Voyager.Common.Proxy.Client.Diagnostics;
+    using Voyager.Common.Proxy.Diagnostics;
     using Voyager.Common.Resilience;
     using Voyager.Common.Results;
     using Voyager.Common.Results.Extensions;
@@ -26,18 +30,20 @@ namespace Voyager.Common.Proxy.Client.Internal
     internal sealed class HttpMethodInterceptor : IMethodInterceptor
     {
         private readonly HttpClient _httpClient;
+        private readonly string _serviceName;
         private readonly string _servicePrefix;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ResilienceOptions _resilience;
         private readonly CircuitBreakerPolicy? _circuitBreaker;
+        private readonly DiagnosticsEmitter _diagnostics;
 
         public HttpMethodInterceptor(HttpClient httpClient, ServiceProxyOptions options)
-            : this(httpClient, options, typeof(HttpMethodInterceptor).DeclaringType ?? typeof(object), null)
+            : this(httpClient, options, typeof(HttpMethodInterceptor).DeclaringType ?? typeof(object), null, null, null)
         {
         }
 
         public HttpMethodInterceptor(HttpClient httpClient, ServiceProxyOptions options, Type serviceType)
-            : this(httpClient, options, serviceType, null)
+            : this(httpClient, options, serviceType, null, null, null)
         {
         }
 
@@ -46,6 +52,17 @@ namespace Voyager.Common.Proxy.Client.Internal
             ServiceProxyOptions options,
             Type serviceType,
             CircuitBreakerPolicy? circuitBreaker)
+            : this(httpClient, options, serviceType, circuitBreaker, null, null)
+        {
+        }
+
+        public HttpMethodInterceptor(
+            HttpClient httpClient,
+            ServiceProxyOptions options,
+            Type serviceType,
+            CircuitBreakerPolicy? circuitBreaker,
+            IEnumerable<IProxyDiagnostics>? diagnosticsHandlers,
+            IProxyRequestContext? requestContext)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
@@ -59,10 +76,35 @@ namespace Voyager.Common.Proxy.Client.Internal
                 throw new ArgumentNullException(nameof(serviceType));
             }
 
+            _serviceName = serviceType.Name;
             _servicePrefix = RouteBuilder.GetServicePrefix(serviceType);
             _jsonOptions = options.JsonSerializerOptions ?? ServiceProxyOptions.DefaultJsonSerializerOptions;
             _resilience = options.Resilience;
             _circuitBreaker = circuitBreaker;
+            _diagnostics = new DiagnosticsEmitter(diagnosticsHandlers, requestContext);
+
+            // Setup circuit breaker state change callback
+            if (_circuitBreaker != null)
+            {
+                _circuitBreaker.OnStateChanged = OnCircuitBreakerStateChanged;
+            }
+        }
+
+        private void OnCircuitBreakerStateChanged(CircuitState oldState, CircuitState newState, int failureCount, Error? lastError)
+        {
+            var userContext = _diagnostics.CaptureUserContext();
+            _diagnostics.EmitCircuitBreakerStateChanged(new CircuitBreakerStateChangedEvent
+            {
+                ServiceName = _serviceName,
+                OldState = oldState.ToString(),
+                NewState = newState.ToString(),
+                FailureCount = failureCount,
+                LastErrorType = lastError?.Type.ToString(),
+                LastErrorMessage = lastError?.Message,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType
+            });
         }
 
         /// <inheritdoc/>
@@ -121,7 +163,7 @@ namespace Voyager.Common.Proxy.Client.Internal
             // Execute without retry
             var result = await ExecuteHttpRequestAsync(method, args, resultType).ConfigureAwait(false);
             await RecordResultForCircuitBreakerAsync(result, resultType).ConfigureAwait(false);
-            return result;
+            return result.Result;
         }
 
         private async Task<object> ExecuteWithRetryAsync(MethodInfo method, object?[] args, Type resultType)
@@ -129,32 +171,55 @@ namespace Voyager.Common.Proxy.Client.Internal
             int attempt = 0;
             int maxAttempts = _resilience.Retry.MaxAttempts;
             int baseDelayMs = _resilience.Retry.BaseDelayMs;
-            object lastResult;
+            HttpRequestResult lastResult;
+
+            // Capture user context once for entire retry sequence
+            var userContext = _diagnostics.CaptureUserContext();
+            var correlationId = DiagnosticsEmitter.GetCorrelationId();
 
             while (true)
             {
                 attempt++;
-                lastResult = await ExecuteHttpRequestAsync(method, args, resultType).ConfigureAwait(false);
+                lastResult = await ExecuteHttpRequestAsync(method, args, resultType, correlationId, userContext).ConfigureAwait(false);
 
                 // Check if success
-                if (IsSuccessResult(lastResult, resultType))
+                if (IsSuccessResult(lastResult.Result, resultType))
                 {
-                    await RecordResultForCircuitBreakerAsync(lastResult, resultType).ConfigureAwait(false);
-                    return lastResult;
+                    await RecordResultForCircuitBreakerAsync(lastResult.Result, resultType).ConfigureAwait(false);
+                    return lastResult.Result;
                 }
 
                 // Get error from result
-                var error = GetErrorFromResult(lastResult, resultType);
+                var error = GetErrorFromResult(lastResult.Result, resultType);
 
                 // Only retry transient errors
                 if (error is null || !error.Type.IsTransient() || attempt >= maxAttempts)
                 {
-                    await RecordResultForCircuitBreakerAsync(lastResult, resultType).ConfigureAwait(false);
-                    return lastResult;
+                    await RecordResultForCircuitBreakerAsync(lastResult.Result, resultType).ConfigureAwait(false);
+                    return lastResult.Result;
                 }
 
                 // Calculate delay with exponential backoff
                 int delayMs = baseDelayMs * (int)Math.Pow(2, attempt - 1);
+
+                // Emit retry event
+                _diagnostics.EmitRetryAttempt(new RetryAttemptEvent
+                {
+                    ServiceName = _serviceName,
+                    MethodName = method.Name,
+                    AttemptNumber = attempt,
+                    MaxAttempts = maxAttempts,
+                    Delay = TimeSpan.FromMilliseconds(delayMs),
+                    WillRetry = true,
+                    ErrorType = error.Type.ToString(),
+                    ErrorMessage = error.Message,
+                    CorrelationId = correlationId,
+                    UserLogin = userContext.UserLogin,
+                    UnitId = userContext.UnitId,
+                    UnitType = userContext.UnitType,
+                    CustomProperties = userContext.CustomProperties
+                });
+
                 await Task.Delay(delayMs).ConfigureAwait(false);
             }
         }
@@ -200,14 +265,41 @@ namespace Voyager.Common.Proxy.Client.Internal
             return null;
         }
 
-        private async Task<object> ExecuteHttpRequestAsync(MethodInfo method, object?[] args, Type resultType)
+        private Task<HttpRequestResult> ExecuteHttpRequestAsync(MethodInfo method, object?[] args, Type resultType)
         {
+            var userContext = _diagnostics.CaptureUserContext();
+            var correlationId = DiagnosticsEmitter.GetCorrelationId();
+            return ExecuteHttpRequestAsync(method, args, resultType, correlationId, userContext);
+        }
+
+        private async Task<HttpRequestResult> ExecuteHttpRequestAsync(
+            MethodInfo method,
+            object?[] args,
+            Type resultType,
+            Guid correlationId,
+            DiagnosticsEmitter.UserContext userContext)
+        {
+            var httpMethod = RouteBuilder.GetHttpMethod(method);
+            var (path, body) = RouteBuilder.BuildRequest(method, args, _servicePrefix);
+            var httpMethodString = ToHttpMethod(httpMethod).Method;
+            var startTime = Stopwatch.GetTimestamp();
+
+            // Emit request starting
+            _diagnostics.EmitRequestStarting(new RequestStartingEvent
+            {
+                ServiceName = _serviceName,
+                MethodName = method.Name,
+                HttpMethod = httpMethodString,
+                Url = path,
+                CorrelationId = correlationId,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
+
             try
             {
-                // Build request
-                var httpMethod = RouteBuilder.GetHttpMethod(method);
-                var (path, body) = RouteBuilder.BuildRequest(method, args, _servicePrefix);
-
                 // Find CancellationToken in args
                 var cancellationToken = FindCancellationToken(method, args);
 
@@ -226,26 +318,91 @@ namespace Voyager.Common.Proxy.Client.Internal
                     .ConfigureAwait(false);
 
                 // Map response to Result
-                return await ResultMapper
+                var result = await ResultMapper
                     .MapResponseAsync(response, resultType, _jsonOptions)
                     .ConfigureAwait(false);
+
+                var duration = GetElapsed(startTime);
+                var isSuccess = IsSuccessResult(result, resultType);
+                var error = isSuccess ? null : GetErrorFromResult(result, resultType);
+
+                // Emit request completed
+                _diagnostics.EmitRequestCompleted(new RequestCompletedEvent
+                {
+                    ServiceName = _serviceName,
+                    MethodName = method.Name,
+                    HttpMethod = httpMethodString,
+                    Url = path,
+                    StatusCode = (int)response.StatusCode,
+                    Duration = duration,
+                    IsSuccess = isSuccess,
+                    CorrelationId = correlationId,
+                    ErrorType = error?.Type.ToString(),
+                    ErrorMessage = error?.Message,
+                    UserLogin = userContext.UserLogin,
+                    UnitId = userContext.UnitId,
+                    UnitType = userContext.UnitType,
+                    CustomProperties = userContext.CustomProperties
+                });
+
+                return new HttpRequestResult(result, (int)response.StatusCode);
             }
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
-                return CreateTimeoutResult(resultType);
+                var duration = GetElapsed(startTime);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                return new HttpRequestResult(CreateTimeoutResult(resultType), 0);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                return CreateCancelledResult(resultType);
+                var duration = GetElapsed(startTime);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                return new HttpRequestResult(CreateCancelledResult(resultType), 0);
             }
             catch (HttpRequestException ex)
             {
-                return CreateConnectionErrorResult(resultType, ex.Message);
+                var duration = GetElapsed(startTime);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                return new HttpRequestResult(CreateConnectionErrorResult(resultType, ex.Message), 0);
             }
             catch (Exception ex)
             {
-                return CreateUnexpectedErrorResult(resultType, ex.Message);
+                var duration = GetElapsed(startTime);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                return new HttpRequestResult(CreateUnexpectedErrorResult(resultType, ex.Message), 0);
             }
+        }
+
+        private void EmitRequestFailed(
+            string methodName,
+            string httpMethod,
+            string url,
+            TimeSpan duration,
+            Exception ex,
+            Guid correlationId,
+            DiagnosticsEmitter.UserContext userContext)
+        {
+            _diagnostics.EmitRequestFailed(new RequestFailedEvent
+            {
+                ServiceName = _serviceName,
+                MethodName = methodName,
+                HttpMethod = httpMethod,
+                Url = url,
+                Duration = duration,
+                ExceptionType = ex.GetType().FullName ?? ex.GetType().Name,
+                ExceptionMessage = ex.Message,
+                CorrelationId = correlationId,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
+        }
+
+        private static TimeSpan GetElapsed(long startTimestamp)
+        {
+            var elapsed = Stopwatch.GetTimestamp() - startTimestamp;
+            return TimeSpan.FromTicks(elapsed * TimeSpan.TicksPerSecond / Stopwatch.Frequency);
         }
 
         private static CancellationToken FindCancellationToken(MethodInfo method, object?[] args)
@@ -347,6 +504,21 @@ namespace Voyager.Common.Proxy.Client.Internal
             }
 
             throw new InvalidOperationException($"Cannot create failure result for type {resultType.Name}");
+        }
+
+        /// <summary>
+        /// Result of an HTTP request execution.
+        /// </summary>
+        private readonly struct HttpRequestResult
+        {
+            public HttpRequestResult(object result, int statusCode)
+            {
+                Result = result;
+                StatusCode = statusCode;
+            }
+
+            public object Result { get; }
+            public int StatusCode { get; }
         }
     }
 }

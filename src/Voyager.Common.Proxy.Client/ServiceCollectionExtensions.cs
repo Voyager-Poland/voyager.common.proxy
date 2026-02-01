@@ -1,8 +1,11 @@
 namespace Voyager.Common.Proxy.Client
 {
     using System;
+    using System.Collections.Generic;
+    using System.Linq;
     using System.Net.Http;
     using Microsoft.Extensions.DependencyInjection;
+    using Voyager.Common.Proxy.Diagnostics;
     using Voyager.Common.Resilience;
 
     /// <summary>
@@ -188,7 +191,18 @@ namespace Voyager.Common.Proxy.Client
                 var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var httpClient = httpClientFactory.CreateClient(clientName);
 
-                return ServiceProxy<TService>.Create(httpClient, options, circuitBreaker);
+                // Resolve diagnostics handlers (optional)
+                var diagnosticsHandlers = sp.GetServices<IProxyDiagnostics>();
+
+                // Resolve request context (optional)
+                var requestContext = sp.GetService<IProxyRequestContext>();
+
+                return ServiceProxy<TService>.Create(
+                    httpClient,
+                    options,
+                    circuitBreaker,
+                    diagnosticsHandlers,
+                    requestContext);
             });
 
             return httpClientBuilder;

@@ -1,6 +1,6 @@
 # ADR-008: Strategia Diagnostyki - Eventy i Observability
 
-**Status:** Propozycja
+**Status:** Zaimplementowano
 **Data:** 2026-01-31
 **Autor:** [Do uzupełnienia]
 
@@ -13,6 +13,7 @@ Potrzebujemy spójnej strategii logowania i diagnostyki w bibliotece proxy, któ
 3. **Jest wydajna** - Zero overhead gdy diagnostyka nie jest potrzebna
 4. **Jest testowalna** - Łatwe mockowanie w testach jednostkowych
 5. **Wspiera distributed tracing** - Propagacja Correlation ID między serwisami
+6. **Wspiera kontekst użytkownika** - Informacje o użytkowniku i jednostce organizacyjnej
 
 **Kontekst:**
 
@@ -21,6 +22,23 @@ Obecnie biblioteka nie emituje żadnych zdarzeń diagnostycznych, co utrudnia:
 - Monitorowanie wydajności (latency, error rates)
 - Śledzenie przepływu żądań między serwisami
 - Alertowanie na podstawie circuit breaker state
+- **Zliczanie żądań per użytkownik/jednostka organizacyjna**
+
+### Wymaganie: Kontekst użytkownika w logach
+
+W produktach Voyager logujemy informacje z danymi użytkownika:
+
+| Pole | Typ | Opis | Przykład |
+|------|-----|------|----------|
+| `UserLogin` | `string` | Login użytkownika (zawsze obecny) | `jan.kowalski` |
+| `UnitId` | `string` | Identyfikator jednostki organizacyjnej | `12345` |
+| `UnitType` | `string` | Typ jednostki (zależny od produktu) | `Agent`, `Akwizytor`, `Broker` |
+
+**Przypadki użycia:**
+- Zliczanie żądań per agent/akwizytor z podziałem na użytkownika
+- Analiza wzorców użycia per jednostka organizacyjna
+- Debugowanie problemów dla konkretnego użytkownika
+- Alerty przy nietypowej aktywności (np. nadmierna liczba żądań)
 
 ## Decyzja
 
@@ -54,6 +72,106 @@ Implementujemy **strategię opartą na eventach** z interfejsem `IProxyDiagnosti
     │ → ILogger       │          │ → TelemetryClient│         │ → Prometheus    │
     └─────────────────┘          └─────────────────┘          └─────────────────┘
 ```
+
+### Struktura pakietów
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    Voyager.Common.Proxy.Abstractions                             │
+│                         (istniejący pakiet)                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  Diagnostics/                                                                    │
+│  ├── IProxyDiagnostics.cs          // Interfejs dla handlerów                   │
+│  ├── IProxyRequestContext.cs       // Interfejs kontekstu użytkownika           │
+│  ├── ProxyDiagnosticsHandler.cs    // Klasa bazowa (puste implementacje)        │
+│  └── Events/                                                                     │
+│      ├── RequestStartingEvent.cs                                                │
+│      ├── RequestCompletedEvent.cs                                               │
+│      ├── RequestFailedEvent.cs                                                  │
+│      ├── RetryAttemptEvent.cs                                                   │
+│      └── CircuitBreakerStateChangedEvent.cs                                     │
+│                                                                                  │
+│  Zależności: brak (tylko .NET Standard)                                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ references
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                      Voyager.Common.Proxy.Client                                 │
+│                         (istniejący pakiet)                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  Internal/                                                                       │
+│  └── HttpMethodInterceptor.cs      // Emituje eventy do IProxyDiagnostics       │
+│                                                                                  │
+│  Diagnostics/                                                                    │
+│  ├── NullProxyDiagnostics.cs       // Domyślny handler (singleton, nic nie robi)│
+│  └── NullProxyRequestContext.cs    // Domyślny kontekst (wszystko null)         │
+│                                                                                  │
+│  ServiceCollectionExtensions.cs    // Rozszerzone o AddProxyDiagnostics()       │
+│                                                                                  │
+│  Zależności: Voyager.Common.Proxy.Abstractions                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ references
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   Voyager.Common.Proxy.Diagnostics                               │
+│                         (NOWY pakiet)                                            │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  LoggingProxyDiagnostics.cs        // Handler logujący do ILogger               │
+│  DiagnosticsServiceCollectionExtensions.cs  // UseLogging() extension           │
+│                                                                                  │
+│  Zależności:                                                                     │
+│  - Voyager.Common.Proxy.Abstractions                                            │
+│  - Microsoft.Extensions.Logging.Abstractions                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│              Voyager.Common.Proxy.Diagnostics.ApplicationInsights                │
+│                         (NOWY pakiet - opcjonalny)                               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  AppInsightsProxyDiagnostics.cs    // Handler wysyłający do Application Insights│
+│  AppInsightsServiceCollectionExtensions.cs  // UseApplicationInsights()         │
+│                                                                                  │
+│  Zależności:                                                                     │
+│  - Voyager.Common.Proxy.Abstractions                                            │
+│  - Microsoft.ApplicationInsights                                                │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│               Voyager.Common.Proxy.Diagnostics.OpenTelemetry                     │
+│                         (NOWY pakiet - opcjonalny)                               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  OpenTelemetryProxyDiagnostics.cs  // Handler dla OpenTelemetry                 │
+│  OpenTelemetryServiceCollectionExtensions.cs  // UseOpenTelemetry()             │
+│                                                                                  │
+│  Zależności:                                                                     │
+│  - Voyager.Common.Proxy.Abstractions                                            │
+│  - OpenTelemetry.Api                                                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tabela: Co gdzie się znajduje
+
+| Komponent | Pakiet | Zależności zewnętrzne |
+|-----------|--------|----------------------|
+| `IProxyDiagnostics` | Abstractions | brak |
+| `IProxyRequestContext` | Abstractions | brak |
+| `ProxyDiagnosticsHandler` | Abstractions | brak |
+| Event records | Abstractions | brak |
+| `NullProxyDiagnostics` | Client | brak |
+| `NullProxyRequestContext` | Client | brak |
+| `HttpMethodInterceptor` (emisja) | Client | brak |
+| `LoggingProxyDiagnostics` | Diagnostics | `Microsoft.Extensions.Logging.Abstractions` |
+| `AppInsightsProxyDiagnostics` | Diagnostics.ApplicationInsights | `Microsoft.ApplicationInsights` |
+| `OpenTelemetryProxyDiagnostics` | Diagnostics.OpenTelemetry | `OpenTelemetry.Api` |
+
+### Dlaczego taki podział?
+
+1. **Abstractions bez zależności** - interfejsy i eventy nie wymagają żadnych zewnętrznych pakietów
+2. **Client bez zależności od logowania** - działa z `NullProxyDiagnostics` gdy diagnostyka niepotrzebna
+3. **Diagnostics jako opt-in** - użytkownik dodaje tylko te pakiety, których potrzebuje
+4. **Separacja APM** - Application Insights i OpenTelemetry to ciężkie zależności, osobne pakiety
 
 ### Interfejs IProxyDiagnostics
 
@@ -177,7 +295,77 @@ public class CircuitBreakerAlerter : ProxyDiagnosticsHandler
 }
 ```
 
+### Kontekst użytkownika - IProxyRequestContext
+
+Biblioteka proxy jest generyczna i nie powinna znać szczegółów biznesowych (np. "agent", "akwizytor").
+Rozwiązanie: interfejs `IProxyRequestContext` dostarczany przez aplikację.
+
+```csharp
+namespace Voyager.Common.Proxy.Diagnostics
+{
+    /// <summary>
+    /// Provides user context for diagnostic events.
+    /// Implement this interface to add user/tenant information to all proxy events.
+    /// </summary>
+    /// <remarks>
+    /// Context is captured once per request and attached to all related events.
+    /// Implementation should be thread-safe and fast (called on every request).
+    /// </remarks>
+    public interface IProxyRequestContext
+    {
+        /// <summary>
+        /// Gets the current user's login. Should always return a value.
+        /// </summary>
+        string? UserLogin { get; }
+
+        /// <summary>
+        /// Gets the organizational unit identifier (agent ID, broker ID, etc.).
+        /// </summary>
+        string? UnitId { get; }
+
+        /// <summary>
+        /// Gets the organizational unit type (e.g., "Agent", "Akwizytor", "Broker").
+        /// Product-specific, not an enum.
+        /// </summary>
+        string? UnitType { get; }
+
+        /// <summary>
+        /// Gets additional custom properties to include in diagnostic events.
+        /// </summary>
+        IReadOnlyDictionary<string, string>? CustomProperties { get; }
+    }
+}
+```
+
+**Przykład implementacji:**
+
+```csharp
+public class HttpContextRequestContext : IProxyRequestContext
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpContextRequestContext(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public string? UserLogin => _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+
+    public string? UnitId => _httpContextAccessor.HttpContext?.User?.FindFirst("unit_id")?.Value;
+
+    public string? UnitType => "Agent"; // lub z konfiguracji/claimu
+
+    public IReadOnlyDictionary<string, string>? CustomProperties => null;
+}
+
+// Rejestracja
+services.AddHttpContextAccessor();
+services.AddScoped<IProxyRequestContext, HttpContextRequestContext>();
+```
+
 ### Event Records
+
+Wszystkie eventy zawierają kontekst użytkownika:
 
 ```csharp
 namespace Voyager.Common.Proxy.Diagnostics
@@ -187,12 +375,19 @@ namespace Voyager.Common.Proxy.Diagnostics
     /// </summary>
     public sealed record RequestStartingEvent
     {
+        // Identyfikacja żądania
         public required string ServiceName { get; init; }
         public required string MethodName { get; init; }
         public required string HttpMethod { get; init; }
         public required string Url { get; init; }
         public required Guid CorrelationId { get; init; }
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+        // Kontekst użytkownika
+        public string? UserLogin { get; init; }
+        public string? UnitId { get; init; }
+        public string? UnitType { get; init; }
+        public IReadOnlyDictionary<string, string>? CustomProperties { get; init; }
     }
 
     /// <summary>
@@ -200,6 +395,7 @@ namespace Voyager.Common.Proxy.Diagnostics
     /// </summary>
     public sealed record RequestCompletedEvent
     {
+        // Identyfikacja żądania
         public required string ServiceName { get; init; }
         public required string MethodName { get; init; }
         public required string HttpMethod { get; init; }
@@ -211,6 +407,12 @@ namespace Voyager.Common.Proxy.Diagnostics
         public string? ErrorType { get; init; }
         public string? ErrorMessage { get; init; }
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+        // Kontekst użytkownika
+        public string? UserLogin { get; init; }
+        public string? UnitId { get; init; }
+        public string? UnitType { get; init; }
+        public IReadOnlyDictionary<string, string>? CustomProperties { get; init; }
     }
 
     /// <summary>
@@ -218,6 +420,7 @@ namespace Voyager.Common.Proxy.Diagnostics
     /// </summary>
     public sealed record RequestFailedEvent
     {
+        // Identyfikacja żądania
         public required string ServiceName { get; init; }
         public required string MethodName { get; init; }
         public required string HttpMethod { get; init; }
@@ -227,6 +430,12 @@ namespace Voyager.Common.Proxy.Diagnostics
         public required string ExceptionMessage { get; init; }
         public required Guid CorrelationId { get; init; }
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+        // Kontekst użytkownika
+        public string? UserLogin { get; init; }
+        public string? UnitId { get; init; }
+        public string? UnitType { get; init; }
+        public IReadOnlyDictionary<string, string>? CustomProperties { get; init; }
     }
 
     /// <summary>
@@ -234,6 +443,7 @@ namespace Voyager.Common.Proxy.Diagnostics
     /// </summary>
     public sealed record RetryAttemptEvent
     {
+        // Identyfikacja żądania
         public required string ServiceName { get; init; }
         public required string MethodName { get; init; }
         public required int AttemptNumber { get; init; }
@@ -243,6 +453,12 @@ namespace Voyager.Common.Proxy.Diagnostics
         public required string ErrorMessage { get; init; }
         public required Guid CorrelationId { get; init; }
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+        // Kontekst użytkownika
+        public string? UserLogin { get; init; }
+        public string? UnitId { get; init; }
+        public string? UnitType { get; init; }
+        public IReadOnlyDictionary<string, string>? CustomProperties { get; init; }
     }
 
     /// <summary>
@@ -257,6 +473,11 @@ namespace Voyager.Common.Proxy.Diagnostics
         public string? LastErrorType { get; init; }
         public string? LastErrorMessage { get; init; }
         public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+        // Kontekst użytkownika (ostatni użytkownik który spowodował zmianę stanu)
+        public string? UserLogin { get; init; }
+        public string? UnitId { get; init; }
+        public string? UnitType { get; init; }
     }
 }
 ```
@@ -726,45 +947,102 @@ internal sealed class HttpMethodInterceptor : IMethodInterceptor
 
 ## Implementacja
 
-### Faza 1: Core Events
+### Faza 1: Voyager.Common.Proxy.Abstractions
 
-- [ ] Utworzenie `Voyager.Common.Proxy.Diagnostics` namespace
-- [ ] Definicja `IProxyDiagnostics` interfejsu
-- [ ] Definicja `ProxyDiagnosticsHandler` klasy abstrakcyjnej
-- [ ] Definicja event records
-- [ ] `NullProxyDiagnostics` (domyślny, singleton)
-- [ ] `ObservableCircuitBreaker` wrapper
-- [ ] Integracja z `HttpMethodInterceptor` - emisja zdarzeń
-- [ ] Przekazywanie `IEnumerable<IProxyDiagnostics>` przez DI
+- [x] Folder `Diagnostics/`
+- [x] `IProxyDiagnostics.cs` - interfejs handlera
+- [x] `IProxyRequestContext.cs` - interfejs kontekstu użytkownika
+- [x] `ProxyDiagnosticsHandler.cs` - klasa bazowa z pustymi implementacjami
+- [x] Folder `Diagnostics/Events/`
+- [x] `RequestStartingEvent.cs`
+- [x] `RequestCompletedEvent.cs`
+- [x] `RequestFailedEvent.cs`
+- [x] `RetryAttemptEvent.cs`
+- [x] `CircuitBreakerStateChangedEvent.cs`
 
-### Faza 2: Wbudowane Handlery
+### Faza 2: Voyager.Common.Proxy.Client
 
-- [ ] `LoggingProxyDiagnostics` (ILogger)
-- [ ] Extension methods dla rejestracji
+- [x] `Diagnostics/NullProxyDiagnostics.cs` - domyślny handler (singleton)
+- [x] `Diagnostics/NullProxyRequestContext.cs` - domyślny kontekst (wszystko null)
+- [x] `Diagnostics/DiagnosticsEmitter.cs` - helper do bezpiecznej emisji zdarzeń
+- [x] Modyfikacja `HttpMethodInterceptor` - emisja zdarzeń
+- [x] Modyfikacja `ServiceCollectionExtensions` - wstrzykiwanie diagnostyki
+- [x] `DiagnosticsServiceCollectionExtensions.cs` - metody rejestracji DI
+- [ ] Testy jednostkowe emisji zdarzeń
+
+### Faza 3: Voyager.Common.Proxy.Diagnostics (NOWY PAKIET)
+
+- [x] Utworzenie projektu `Voyager.Common.Proxy.Diagnostics.csproj`
+- [x] `LoggingProxyDiagnostics.cs` - handler logujący do ILogger
+- [x] `LoggingDiagnosticsExtensions.cs` - `AddProxyLoggingDiagnostics()` extension
+- [x] `README.md` - dokumentacja pakietu
 - [ ] Testy jednostkowe
-- [ ] Dokumentacja w README
 
-### Faza 3: Zewnętrzne Pakiety (opcjonalne)
+### Faza 4: Zewnętrzne pakiety (opcjonalne, przyszłość)
 
-- [ ] `Voyager.Common.Proxy.Diagnostics.AppInsights`
+- [ ] `Voyager.Common.Proxy.Diagnostics.ApplicationInsights`
 - [ ] `Voyager.Common.Proxy.Diagnostics.OpenTelemetry`
 - [ ] Przykłady integracji
 
 ## Przykłady użycia
 
-### Podstawowe logowanie
+### Podstawowe logowanie z kontekstem użytkownika
 
 ```csharp
-// Rejestracja
+// Rejestracja kontekstu użytkownika
+services.AddScoped<IProxyRequestContext, HttpContextRequestContext>();
+
+// Rejestracja proxy z diagnostyką
 services.AddServiceProxy<IUserService>("https://api.example.com")
     .AddDiagnostics(d => d.UseLogging());
 
-// Wynik w logach:
-// [DBG] Voyager.Proxy: Request starting: GET https://api.example.com/users/123 [correlation: abc-123]
-// [DBG] Voyager.Proxy: Request completed: GET https://api.example.com/users/123 200 OK (45ms) [correlation: abc-123]
+// Wynik w logach (structured logging):
+// [DBG] Voyager.Proxy: Request completed
+//       {ServiceName="IUserService", MethodName="GetUserAsync", HttpMethod="GET",
+//        Url="/get-user?id=123", StatusCode=200, Duration=45ms, IsSuccess=true,
+//        UserLogin="jan.kowalski", UnitId="12345", UnitType="Agent",
+//        CorrelationId="abc-123-def"}
 ```
 
-### Application Insights
+### Zliczanie żądań per agent/użytkownik
+
+```csharp
+public class RequestCountingDiagnostics : ProxyDiagnosticsHandler
+{
+    private readonly IMetricsService _metrics;
+
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        // Metryka: liczba żądań per unit (agent/akwizytor)
+        _metrics.IncrementCounter(
+            "proxy_requests_total",
+            new Dictionary<string, string>
+            {
+                ["service"] = e.ServiceName,
+                ["method"] = e.MethodName,
+                ["unit_id"] = e.UnitId ?? "unknown",
+                ["unit_type"] = e.UnitType ?? "unknown",
+                ["user"] = e.UserLogin ?? "anonymous",
+                ["success"] = e.IsSuccess.ToString()
+            });
+
+        // Metryka: latencja per service
+        _metrics.RecordHistogram(
+            "proxy_request_duration_ms",
+            e.Duration.TotalMilliseconds,
+            new Dictionary<string, string>
+            {
+                ["service"] = e.ServiceName,
+                ["unit_type"] = e.UnitType ?? "unknown"
+            });
+    }
+}
+
+// Rejestracja
+services.AddProxyDiagnostics<RequestCountingDiagnostics>();
+```
+
+### Application Insights z kontekstem użytkownika
 
 ```csharp
 // Rejestracja
@@ -776,6 +1054,7 @@ services.AddServiceProxy<IUserService>("https://api.example.com")
 // Wynik w App Insights:
 // - Dependency tracking z correlation
 // - Custom metrics (request count, latency)
+// - Custom dimensions: UserLogin, UnitId, UnitType
 // - Circuit breaker events jako custom events
 ```
 

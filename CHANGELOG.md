@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New error types supported: `TooManyRequests`, `CircuitBreakerOpen` in transient classification
 - Server projects now reference `Voyager.Common.Results` for centralized error handling
-- ADR-008: Diagnostics Strategy now uses callback APIs from Voyager.Common.Results/Resilience 1.7.0-preview.2:
-  - `CircuitBreakerPolicy.OnStateChanged` callback for circuit breaker state changes
-  - `BindWithRetryAsync(..., onRetryAttempt)` callback for retry attempt notifications
+- **ADR-008: Diagnostics and Observability** - complete implementation:
+  - `IProxyDiagnostics` interface for receiving proxy events
+  - `IProxyRequestContext` interface for user context (login, unit ID, unit type)
+  - Event types: `RequestStartingEvent`, `RequestCompletedEvent`, `RequestFailedEvent`, `RetryAttemptEvent`, `CircuitBreakerStateChangedEvent`
+  - `ProxyDiagnosticsHandler` abstract base class for easy handler implementation
+  - New package `Voyager.Common.Proxy.Diagnostics` with `LoggingProxyDiagnostics`
+  - DI extensions: `AddProxyDiagnostics<T>()`, `AddProxyRequestContext<T>()`, `AddProxyLoggingDiagnostics()`
+  - All events include user context for request counting per user/unit
