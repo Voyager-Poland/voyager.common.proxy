@@ -224,6 +224,112 @@ This package uses raw OWIN delegate signatures instead of `IAppBuilder` extensio
 Func<AppFunc, AppFunc> middleware = ServiceProxyOwinMiddleware.Create<IUserService>(factory);
 ```
 
+## Diagnostics and Observability
+
+The OWIN middleware supports diagnostic events for logging and observability. Configure diagnostics through the options.
+
+### Basic Setup
+
+```csharp
+using Voyager.Common.Proxy.Diagnostics;
+using Microsoft.Extensions.Logging;
+
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger<LoggingProxyDiagnostics>();
+        var diagnosticsHandler = new LoggingProxyDiagnostics(logger);
+
+        app.Use(ServiceProxyOwinMiddleware.Create<IUserService>(options =>
+        {
+            options.ServiceFactory = () => container.Resolve<IUserService>();
+            options.DiagnosticsHandlers = new IProxyDiagnostics[] { diagnosticsHandler };
+        }));
+    }
+}
+```
+
+### Adding User Context
+
+To include user information in diagnostic events:
+
+```csharp
+public class OwinProxyRequestContext : IProxyRequestContext
+{
+    private readonly IDictionary<string, object> _environment;
+
+    public OwinProxyRequestContext(IDictionary<string, object> environment)
+    {
+        _environment = environment;
+    }
+
+    public string? UserLogin
+    {
+        get
+        {
+            var user = _environment.TryGetValue("server.User", out var u) ? u as ClaimsPrincipal : null;
+            return user?.Identity?.Name;
+        }
+    }
+
+    public string? UnitId
+    {
+        get
+        {
+            var user = _environment.TryGetValue("server.User", out var u) ? u as ClaimsPrincipal : null;
+            return user?.FindFirst("unit_id")?.Value;
+        }
+    }
+
+    public string? UnitType => "Agent";
+    public IReadOnlyDictionary<string, string>? CustomProperties => null;
+}
+
+// Configure with request context factory
+app.Use(ServiceProxyOwinMiddleware.Create<IUserService>(options =>
+{
+    options.ServiceFactory = () => container.Resolve<IUserService>();
+    options.DiagnosticsHandlers = new IProxyDiagnostics[] { diagnosticsHandler };
+    options.RequestContextFactory = env => new OwinProxyRequestContext(env);
+}));
+```
+
+### Custom Diagnostics Handler
+
+```csharp
+public class MetricsDiagnostics : ProxyDiagnosticsHandler
+{
+    private readonly IMetricsService _metrics;
+
+    public MetricsDiagnostics(IMetricsService metrics) => _metrics = metrics;
+
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        _metrics.RecordHistogram("owin_request_duration_ms", e.Duration.TotalMilliseconds,
+            new[] { ("service", e.ServiceName), ("method", e.MethodName) });
+    }
+}
+
+// Multiple handlers
+options.DiagnosticsHandlers = new IProxyDiagnostics[]
+{
+    new LoggingProxyDiagnostics(logger),
+    new MetricsDiagnostics(metricsService)
+};
+```
+
+### Server-Side Events
+
+| Event | When Emitted |
+|-------|--------------|
+| `OnRequestStarting` | When request is received |
+| `OnRequestCompleted` | After response is sent (success or business error) |
+| `OnRequestFailed` | When exception occurs during processing |
+
+> **Note:** Server-side does not emit `OnRetryAttempt` or `OnCircuitBreakerStateChanged` - these are client-side patterns.
+
 ## Target Framework
 
 - `net48` (.NET Framework 4.8)

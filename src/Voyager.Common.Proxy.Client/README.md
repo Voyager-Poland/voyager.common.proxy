@@ -673,9 +673,95 @@ public interface IOrderService
 **Optional:**
 - `Microsoft.Extensions.Http.Polly` - HTTP-level retry policies
 
+## Diagnostics and Observability
+
+The proxy supports diagnostics events for logging, metrics, and observability. Events are emitted for all proxy operations including requests, retries, and circuit breaker state changes.
+
+### Basic Setup with Logging
+
+```csharp
+// Install: dotnet add package Voyager.Common.Proxy.Diagnostics
+
+using Voyager.Common.Proxy.Diagnostics;
+
+// Register logging diagnostics
+services.AddLogging(builder => builder.AddConsole());
+services.AddProxyLoggingDiagnostics();
+
+// Register your service proxy
+services.AddServiceProxy<IUserService>("https://api.example.com");
+```
+
+### Adding User Context
+
+To include user information (login, unit ID, unit type) in all diagnostic events:
+
+```csharp
+// Implement IProxyRequestContext
+public class HttpContextRequestContext : IProxyRequestContext
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpContextRequestContext(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public string? UserLogin => _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+    public string? UnitId => _httpContextAccessor.HttpContext?.User?.FindFirst("unit_id")?.Value;
+    public string? UnitType => "Agent"; // or from claims/config
+    public IReadOnlyDictionary<string, string>? CustomProperties => null;
+}
+
+// Register
+services.AddHttpContextAccessor();
+services.AddProxyRequestContext<HttpContextRequestContext>();
+```
+
+### Custom Diagnostics Handler
+
+Create custom handlers for metrics, APM, or alerting:
+
+```csharp
+public class MetricsDiagnostics : ProxyDiagnosticsHandler
+{
+    private readonly IMetricsService _metrics;
+
+    public MetricsDiagnostics(IMetricsService metrics) => _metrics = metrics;
+
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        _metrics.RecordHistogram("proxy_duration_ms", e.Duration.TotalMilliseconds,
+            new[] { ("service", e.ServiceName), ("method", e.MethodName) });
+    }
+
+    public override void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e)
+    {
+        if (e.NewState == "Open")
+            _metrics.IncrementCounter("circuit_breaker_opened",
+                new[] { ("service", e.ServiceName) });
+    }
+}
+
+// Register multiple handlers
+services.AddProxyDiagnostics<LoggingProxyDiagnostics>();
+services.AddProxyDiagnostics<MetricsDiagnostics>();
+```
+
+### Available Events
+
+| Event | When Emitted |
+|-------|--------------|
+| `OnRequestStarting` | Before HTTP request is sent |
+| `OnRequestCompleted` | After response received (success or business error) |
+| `OnRequestFailed` | When exception occurs |
+| `OnRetryAttempt` | Before each retry attempt |
+| `OnCircuitBreakerStateChanged` | When circuit breaker state changes |
+
 ## Related Packages
 
 - **Voyager.Common.Proxy.Abstractions** - HTTP attributes (optional)
+- **Voyager.Common.Proxy.Diagnostics** - Logging diagnostics handler
 - **Voyager.Common.Proxy.Server** - Server-side endpoint generation
 - **Voyager.Common.Results** - Result pattern library
 - **Voyager.Common.Resilience** - Circuit breaker for Result types (included)
