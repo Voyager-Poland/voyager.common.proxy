@@ -162,9 +162,43 @@ Implementujemy **strategię opartą na eventach** z interfejsem `IProxyDiagnosti
 | `NullProxyDiagnostics` | Client | brak |
 | `NullProxyRequestContext` | Client | brak |
 | `HttpMethodInterceptor` (emisja) | Client | brak |
+| `NullProxyDiagnostics` (server) | Server.Core | brak |
+| `NullProxyRequestContext` (server) | Server.Core | brak |
+| `RequestDispatcher` (emisja) | Server.Core | brak |
 | `LoggingProxyDiagnostics` | Diagnostics | `Microsoft.Extensions.Logging.Abstractions` |
 | `AppInsightsProxyDiagnostics` | Diagnostics.ApplicationInsights | `Microsoft.ApplicationInsights` |
 | `OpenTelemetryProxyDiagnostics` | Diagnostics.OpenTelemetry | `OpenTelemetry.Api` |
+
+### Diagnostyka po stronie serwera
+
+Serwery (ASP.NET Core i OWIN) również emitują zdarzenia diagnostyczne. Różnica polega na tym, że serwery nie używają retry ani circuit breaker - te wzorce są stosowane po stronie klienta.
+
+**Eventy serwerowe:**
+- `OnRequestStarting` - gdy żądanie jest odbierane
+- `OnRequestCompleted` - gdy żądanie jest zakończone (sukces lub błąd biznesowy)
+- `OnRequestFailed` - gdy żądanie kończy się wyjątkiem
+
+**ASP.NET Core:**
+Diagnostyka jest automatycznie rozwiązywana z DI:
+```csharp
+// Rejestracja handlera diagnostycznego
+services.AddProxyDiagnostics<LoggingProxyDiagnostics>();
+services.AddProxyRequestContext<HttpContextRequestContext>();
+
+// Mapowanie proxy - diagnostyka będzie automatycznie aktywna
+app.MapServiceProxy<IUserService>();
+```
+
+**OWIN:**
+Diagnostyka jest przekazywana przez opcje:
+```csharp
+app.UseServiceProxy<IVIPService>(options =>
+{
+    options.ServiceFactory = () => vipService;
+    options.DiagnosticsHandlers = new[] { new LoggingProxyDiagnostics(logger) };
+    options.RequestContextFactory = env => new OwinProxyRequestContext(env);
+});
+```
 
 ### Dlaczego taki podział?
 
@@ -977,6 +1011,16 @@ internal sealed class HttpMethodInterceptor : IMethodInterceptor
 - [x] `LoggingDiagnosticsExtensions.cs` - `AddProxyLoggingDiagnostics()` extension
 - [x] `README.md` - dokumentacja pakietu
 - [ ] Testy jednostkowe
+
+### Faza 3b: Voyager.Common.Proxy.Server.Core (DIAGNOSTYKA SERWEROWA)
+
+- [x] `Diagnostics/ServerDiagnosticsEmitter.cs` - helper do bezpiecznej emisji zdarzeń
+- [x] `Diagnostics/NullProxyDiagnostics.cs` - domyślny handler (singleton)
+- [x] `Diagnostics/NullProxyRequestContext.cs` - domyślny kontekst (wszystko null)
+- [x] Modyfikacja `RequestDispatcher` - emisja zdarzeń z pomiarem czasu
+- [x] Modyfikacja `ServiceProxyEndpointRouteBuilderExtensions` (ASP.NET Core) - przekazywanie diagnostyki z DI
+- [x] Modyfikacja `ServiceProxyMiddleware` (OWIN) - przekazywanie diagnostyki przez opcje
+- [x] Rozszerzenie `ServiceProxyOptions<T>` (OWIN) - właściwości DiagnosticsHandlers i RequestContextFactory
 
 ### Faza 4: Zewnętrzne pakiety (opcjonalne, przyszłość)
 

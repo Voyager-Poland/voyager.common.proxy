@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Voyager.Common.Proxy.Abstractions;
+using Voyager.Common.Proxy.Diagnostics;
 using Voyager.Common.Proxy.Server.Abstractions;
 using Voyager.Common.Proxy.Server.Core;
 using ProxyAllowAnonymous = Voyager.Common.Proxy.Abstractions.AllowAnonymousAttribute;
@@ -74,8 +75,10 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
                     var service = context.RequestServices.GetRequiredService<TService>();
                     var requestContext = new AspNetCoreRequestContext(context);
                     var responseWriter = new AspNetCoreResponseWriter(context.Response);
+                    var diagnosticsHandlers = context.RequestServices.GetServices<IProxyDiagnostics>();
+                    var proxyRequestContext = context.RequestServices.GetService<IProxyRequestContext>();
 
-                    await dispatcher.DispatchAsync(requestContext, responseWriter, descriptor, service);
+                    await dispatcher.DispatchAsync(requestContext, responseWriter, descriptor, service, diagnosticsHandlers, proxyRequestContext);
                 });
 
             // Add metadata for OpenAPI/Swagger
@@ -208,8 +211,10 @@ public static class ServiceProxyEndpointRouteBuilderExtensions
                     var service = options.CreateService(context);
                     var reqContext = new AspNetCoreRequestContext(context);
                     var responseWriter = new AspNetCoreResponseWriter(context.Response);
+                    var diagnosticsHandlers = context.RequestServices.GetServices<IProxyDiagnostics>();
+                    var proxyRequestContext = context.RequestServices.GetService<IProxyRequestContext>();
 
-                    await dispatcher.DispatchAsync(reqContext, responseWriter, currentDescriptor, service);
+                    await dispatcher.DispatchAsync(reqContext, responseWriter, currentDescriptor, service, diagnosticsHandlers, proxyRequestContext);
                 });
 
             // Add metadata for OpenAPI/Swagger

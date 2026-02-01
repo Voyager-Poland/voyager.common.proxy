@@ -1,9 +1,13 @@
 namespace Voyager.Common.Proxy.Server.Core;
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Tasks;
+using Voyager.Common.Proxy.Diagnostics;
 using Voyager.Common.Proxy.Server.Abstractions;
+using Voyager.Common.Proxy.Server.Core.Diagnostics;
 
 /// <summary>
 /// Dispatches HTTP requests to service methods and writes responses.
@@ -27,12 +31,55 @@ public class RequestDispatcher
     /// <param name="responseWriter">The response writer.</param>
     /// <param name="endpoint">The endpoint descriptor.</param>
     /// <param name="serviceInstance">The service instance to invoke.</param>
-    public async Task DispatchAsync(
+    public Task DispatchAsync(
         IRequestContext context,
         IResponseWriter responseWriter,
         EndpointDescriptor endpoint,
         object serviceInstance)
     {
+        return DispatchAsync(context, responseWriter, endpoint, serviceInstance, null, null);
+    }
+
+    /// <summary>
+    /// Dispatches a request to the service method and writes the response with diagnostics.
+    /// </summary>
+    /// <param name="context">The request context.</param>
+    /// <param name="responseWriter">The response writer.</param>
+    /// <param name="endpoint">The endpoint descriptor.</param>
+    /// <param name="serviceInstance">The service instance to invoke.</param>
+    /// <param name="diagnosticsHandlers">Optional diagnostics handlers.</param>
+    /// <param name="requestContext">Optional request context for user information.</param>
+    public async Task DispatchAsync(
+        IRequestContext context,
+        IResponseWriter responseWriter,
+        EndpointDescriptor endpoint,
+        object serviceInstance,
+        IEnumerable<IProxyDiagnostics>? diagnosticsHandlers,
+        IProxyRequestContext? requestContext)
+    {
+        var emitter = new ServerDiagnosticsEmitter(diagnosticsHandlers, requestContext);
+        var userContext = emitter.CaptureUserContext();
+        var correlationId = ServerDiagnosticsEmitter.GetCorrelationId();
+        var stopwatch = Stopwatch.StartNew();
+        var serviceName = endpoint.ServiceType.Name;
+        var methodName = endpoint.Method.Name;
+        var httpMethod = endpoint.HttpMethod;
+        var url = endpoint.RouteTemplate;
+
+        // Emit RequestStarting
+        emitter.EmitRequestStarting(new RequestStartingEvent
+        {
+            ServiceName = serviceName,
+            MethodName = methodName,
+            HttpMethod = httpMethod,
+            Url = url,
+            CorrelationId = correlationId,
+            UserLogin = userContext.UserLogin,
+            UnitId = userContext.UnitId,
+            UnitType = userContext.UnitType,
+            CustomProperties = userContext.CustomProperties
+        });
+
         try
         {
             // Bind parameters
@@ -59,29 +106,104 @@ public class RequestDispatcher
                 }
             }
 
-            // Write response based on Result
-            await WriteResultResponseAsync(responseWriter, result, endpoint);
+            // Write response based on Result and emit completed event
+            stopwatch.Stop();
+            var (statusCode, isSuccess, errorType, errorMessage) = await WriteResultResponseAsync(responseWriter, result, endpoint);
+
+            emitter.EmitRequestCompleted(new RequestCompletedEvent
+            {
+                ServiceName = serviceName,
+                MethodName = methodName,
+                HttpMethod = httpMethod,
+                Url = url,
+                StatusCode = statusCode,
+                Duration = stopwatch.Elapsed,
+                IsSuccess = isSuccess,
+                CorrelationId = correlationId,
+                ErrorType = errorType,
+                ErrorMessage = errorMessage,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
         }
         catch (TargetInvocationException ex) when (ex.InnerException != null)
         {
+            stopwatch.Stop();
             await WriteExceptionResponseAsync(responseWriter, ex.InnerException);
+
+            emitter.EmitRequestFailed(new RequestFailedEvent
+            {
+                ServiceName = serviceName,
+                MethodName = methodName,
+                HttpMethod = httpMethod,
+                Url = url,
+                Duration = stopwatch.Elapsed,
+                ExceptionType = ex.InnerException.GetType().FullName ?? ex.InnerException.GetType().Name,
+                ExceptionMessage = ex.InnerException.Message,
+                CorrelationId = correlationId,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
         }
         catch (ArgumentException ex)
         {
+            stopwatch.Stop();
             await responseWriter.WriteErrorAsync("Validation", ex.Message);
+
+            emitter.EmitRequestCompleted(new RequestCompletedEvent
+            {
+                ServiceName = serviceName,
+                MethodName = methodName,
+                HttpMethod = httpMethod,
+                Url = url,
+                StatusCode = 400, // Validation errors return 400
+                Duration = stopwatch.Elapsed,
+                IsSuccess = false,
+                CorrelationId = correlationId,
+                ErrorType = "Validation",
+                ErrorMessage = ex.Message,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             await WriteExceptionResponseAsync(responseWriter, ex);
+
+            emitter.EmitRequestFailed(new RequestFailedEvent
+            {
+                ServiceName = serviceName,
+                MethodName = methodName,
+                HttpMethod = httpMethod,
+                Url = url,
+                Duration = stopwatch.Elapsed,
+                ExceptionType = ex.GetType().FullName ?? ex.GetType().Name,
+                ExceptionMessage = ex.Message,
+                CorrelationId = correlationId,
+                UserLogin = userContext.UserLogin,
+                UnitId = userContext.UnitId,
+                UnitType = userContext.UnitType,
+                CustomProperties = userContext.CustomProperties
+            });
         }
     }
 
-    private static async Task WriteResultResponseAsync(IResponseWriter responseWriter, object? result, EndpointDescriptor endpoint)
+    private static async Task<(int StatusCode, bool IsSuccess, string? ErrorType, string? ErrorMessage)> WriteResultResponseAsync(
+        IResponseWriter responseWriter,
+        object? result,
+        EndpointDescriptor endpoint)
     {
         if (result == null)
         {
             await responseWriter.WriteNoContentAsync();
-            return;
+            return (204, true, null, null);
         }
 
         // Use reflection to access Result properties
@@ -103,16 +225,19 @@ public class RequestDispatcher
                 if (value != null)
                 {
                     await responseWriter.WriteJsonAsync(value, 200);
+                    return (200, true, null, null);
                 }
                 else
                 {
                     await responseWriter.WriteNoContentAsync();
+                    return (204, true, null, null);
                 }
             }
             else
             {
                 // Result (non-generic) - no content
                 await responseWriter.WriteNoContentAsync();
+                return (204, true, null, null);
             }
         }
         else
@@ -123,21 +248,44 @@ public class RequestDispatcher
 
             if (error != null)
             {
-                var errorType = error.GetType();
-                var typeProperty = errorType.GetProperty("Type");
-                var messageProperty = errorType.GetProperty("Message");
+                var errorObjType = error.GetType();
+                var typeProperty = errorObjType.GetProperty("Type");
+                var messageProperty = errorObjType.GetProperty("Message");
 
                 var errorTypeValue = typeProperty?.GetValue(error);
                 var errorMessage = messageProperty?.GetValue(error)?.ToString() ?? "An error occurred";
 
                 var errorTypeName = errorTypeValue?.ToString() ?? "Unknown";
                 await responseWriter.WriteErrorAsync(errorTypeName, errorMessage);
+
+                // Get HTTP status code from error type (approximate)
+                var statusCode = GetStatusCodeForErrorType(errorTypeName);
+                return (statusCode, false, errorTypeName, errorMessage);
             }
             else
             {
                 await responseWriter.WriteErrorAsync("Unknown", "An unknown error occurred");
+                return (500, false, "Unknown", "An unknown error occurred");
             }
         }
+    }
+
+    private static int GetStatusCodeForErrorType(string errorType)
+    {
+        return errorType switch
+        {
+            "NotFound" => 404,
+            "Validation" => 400,
+            "Unauthorized" => 401,
+            "Forbidden" => 403,
+            "Conflict" => 409,
+            "TooManyRequests" => 429,
+            "Timeout" => 408,
+            "Unavailable" => 503,
+            "CircuitBreakerOpen" => 503,
+            "Internal" => 500,
+            _ => 400 // Default to bad request for unknown business errors
+        };
     }
 
     private static async Task WriteExceptionResponseAsync(IResponseWriter responseWriter, Exception exception)

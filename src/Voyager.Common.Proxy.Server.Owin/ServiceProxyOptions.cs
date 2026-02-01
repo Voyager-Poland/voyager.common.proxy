@@ -2,6 +2,7 @@ namespace Voyager.Common.Proxy.Server.Owin;
 
 using System;
 using System.Collections.Generic;
+using Voyager.Common.Proxy.Diagnostics;
 using Voyager.Common.Proxy.Server.Abstractions;
 
 /// <summary>
@@ -27,6 +28,31 @@ public sealed class ServiceProxyOptions<TService> : ServiceProxyOptionsBase<TSer
     /// </code>
     /// </example>
     public Func<IDictionary<string, object>, TService>? ContextAwareFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets the diagnostics handlers for emitting proxy events.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// options.DiagnosticsHandlers = new[] { new LoggingProxyDiagnostics(logger) };
+    /// </code>
+    /// </example>
+    public IEnumerable<IProxyDiagnostics>? DiagnosticsHandlers { get; set; }
+
+    /// <summary>
+    /// Gets or sets a factory for creating request context from the OWIN environment.
+    /// Used to provide user information for diagnostic events.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// options.RequestContextFactory = env =>
+    /// {
+    ///     var user = env["server.User"] as ClaimsPrincipal;
+    ///     return new OwinProxyRequestContext(user);
+    /// };
+    /// </code>
+    /// </example>
+    public Func<IDictionary<string, object>, IProxyRequestContext?>? RequestContextFactory { get; set; }
 
     /// <summary>
     /// Validates the options configuration.

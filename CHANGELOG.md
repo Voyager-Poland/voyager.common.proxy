@@ -37,3 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New package `Voyager.Common.Proxy.Diagnostics` with `LoggingProxyDiagnostics`
   - DI extensions: `AddProxyDiagnostics<T>()`, `AddProxyRequestContext<T>()`, `AddProxyLoggingDiagnostics()`
   - All events include user context for request counting per user/unit
+  - **Server-side diagnostics**: `RequestDispatcher` now emits events for ASP.NET Core and OWIN servers
+  - ASP.NET Core: diagnostics automatically resolved from DI
+  - OWIN: `ServiceProxyOptions<T>.DiagnosticsHandlers` and `RequestContextFactory` properties
