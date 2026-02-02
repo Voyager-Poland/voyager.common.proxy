@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net48;net6.0;net8.0</TargetFrameworks>
     <Description>Logging diagnostics handler for Voyager.Common.Proxy - integrates with Microsoft.Extensions.Logging</Description>
     <PackageTags>http;proxy;rest;api;logging;diagnostics;observability</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
