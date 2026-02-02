@@ -101,6 +101,9 @@ jobs:
     - name: Pack Voyager.Common.Proxy.Diagnostics
       run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Diagnostics/Voyager.Common.Proxy.Diagnostics.csproj
 
+    - name: Pack Voyager.Common.Proxy.Diagnostics.TraceContext
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Diagnostics.TraceContext/Voyager.Common.Proxy.Diagnostics.TraceContext.csproj
+
     - name: Upload artifacts for deployment job
       uses: actions/upload-artifact@v4
       with:

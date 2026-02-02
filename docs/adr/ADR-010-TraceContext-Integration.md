@@ -1,6 +1,6 @@
 # ADR-010: Integracja z Voyager.TraceContext
 
-**Status:** Częściowo zaimplementowane (Faza 1 ukończona)
+**Status:** Zaimplementowane (Faza 1 i Faza 2 ukończone)
 **Data:** 2026-02-02
 **Autor:** [Do uzupełnienia]
 
@@ -210,8 +210,11 @@ public void Configuration(IAppBuilder app)
 ```
 src/Voyager.Common.Proxy.Diagnostics.TraceContext/
 ├── Voyager.Common.Proxy.Diagnostics.TraceContext.csproj
-├── TraceContextDiagnosticsExtensions.cs      // AddProxyTraceContextDiagnostics()
-├── TraceContextAwareDiagnosticsEmitter.cs    // Rozszerza DiagnosticsEmitter o trace context
+├── ITraceContextAccessor.cs                  // Lokalny interface dla trace context
+├── TraceContextHelper.cs                     // Pobiera trace context z accessor
+├── TraceContextProxyRequestContext.cs        // Wrapper IProxyRequestContext z trace info
+├── ServiceCollectionExtensions.cs            // AddProxyTraceContext() dla ASP.NET Core
+├── OwinTraceContextExtensions.cs             // CreateRequestContextFactory() dla OWIN
 └── README.md
 ```
 
@@ -227,11 +230,13 @@ src/Voyager.Common.Proxy.Diagnostics.TraceContext/
     <ProjectReference Include="..\Voyager.Common.Proxy.Abstractions\..." />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Voyager.TraceContext.Abstractions" Version="1.0.0" />
-  </ItemGroup>
+  <!-- Pakiet definiuje własny ITraceContextAccessor interface -->
+  <!-- Użytkownicy mogą zaimplementować go samodzielnie lub zintegrować z zewnętrznym tracing -->
 </Project>
 ```
+
+**Uwaga:** Pakiet definiuje własny `ITraceContextAccessor` interface zamiast zależności od zewnętrznego pakietu.
+Użytkownicy implementują ten interface, aby dostarczyć trace context z ich infrastruktury (np. OpenTelemetry, Activity.Current).
 
 ## Dlaczego ta decyzja
 
@@ -291,17 +296,19 @@ services.AddServiceProxy<IUserService>("...")
 - [x] Zaktualizować `DiagnosticsEmitter` i `ServerDiagnosticsEmitter` z `GetTraceContext()`
 - [x] Zaktualizować `LoggingProxyDiagnostics` z nowymi polami
 
-### Faza 2: Nowy pakiet Diagnostics.TraceContext (opcjonalne)
+### Faza 2: Nowy pakiet Diagnostics.TraceContext ✅ UKOŃCZONE
 
-- [ ] Utworzyć projekt `Voyager.Common.Proxy.Diagnostics.TraceContext`
-- [ ] Implementacja integracji z `ITraceContextAccessor`
-- [ ] Extension method `UseTraceContext()`
-- [ ] README.md z przykładami użycia
-- [ ] Testy jednostkowe
+- [x] Utworzyć projekt `Voyager.Common.Proxy.Diagnostics.TraceContext`
+- [x] Zdefiniować lokalny `ITraceContextAccessor` interface
+- [x] Implementacja `TraceContextProxyRequestContext` wzbogacającego o trace context
+- [x] Extension method `AddProxyTraceContext()` dla ASP.NET Core
+- [x] `OwinTraceContextExtensions` dla .NET Framework
+- [x] README.md z przykładami użycia
+- [x] Dodanie do solution i CI/CD pipeline
 
-### Faza 3: Integracja z OWIN (opcjonalne)
+### Faza 3: Integracja z OWIN ✅ UKOŃCZONE
 
-- [ ] OWIN middleware - wsparcie dla `TraceContextAccessor` w opcjach
+- [x] OWIN helper - `CreateRequestContextFactory()` w OwinTraceContextExtensions
 
 ### Faza 4: Dokumentacja i przykłady
 
