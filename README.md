@@ -40,6 +40,7 @@ Both sides use the same interface contract and routing conventions, ensuring con
 |---------|-------------|---------|
 | [`Voyager.Common.Proxy.Abstractions`](#abstractions) | HTTP routing attributes (optional) | net48, net6.0, net8.0 |
 | [`Voyager.Common.Proxy.Client`](#client) | HTTP client proxy generation | net48, net6.0, net8.0 |
+| [`Voyager.Common.Proxy.Diagnostics`](#diagnostics) | Logging diagnostics handler | net48, net6.0, net8.0 |
 | [`Voyager.Common.Proxy.Server.AspNetCore`](#server-aspnet-core) | ASP.NET Core endpoint generation | net6.0, net8.0 |
 | [`Voyager.Common.Proxy.Server.Owin`](#server-owin) | OWIN middleware for .NET Framework | net48 |
 
@@ -330,6 +331,41 @@ services.AddServiceProxy<IUserService>("https://api.example.com")
     .AddPolicyHandler(GetRetryPolicy());
 ```
 
+### Diagnostics
+
+```bash
+dotnet add package Voyager.Common.Proxy.Diagnostics
+```
+
+Logging and observability for proxy operations:
+
+```csharp
+// Add logging diagnostics
+services.AddLogging(b => b.AddConsole());
+services.AddProxyLoggingDiagnostics();
+
+// Add user context for request tracking
+services.AddHttpContextAccessor();
+services.AddProxyRequestContext<HttpContextRequestContext>();
+
+// Custom diagnostics handler
+public class MetricsDiagnostics : ProxyDiagnosticsHandler
+{
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        _metrics.RecordDuration(e.ServiceName, e.MethodName, e.Duration);
+    }
+
+    public override void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e)
+    {
+        if (e.NewState == "Open")
+            _alerting.SendAlert($"Circuit breaker opened: {e.ServiceName}");
+    }
+}
+
+services.AddProxyDiagnostics<MetricsDiagnostics>();
+```
+
 ### Server (ASP.NET Core)
 
 ```bash
@@ -402,8 +438,9 @@ public interface IOrderService
 ```
 voyager.common.proxy/
 ├── src/
-│   ├── Voyager.Common.Proxy.Abstractions/     # HTTP attributes
+│   ├── Voyager.Common.Proxy.Abstractions/     # HTTP attributes, diagnostic interfaces
 │   ├── Voyager.Common.Proxy.Client/           # Client proxy
+│   ├── Voyager.Common.Proxy.Diagnostics/      # Logging diagnostics handler
 │   ├── Voyager.Common.Proxy.Server.Abstractions/  # Server contracts
 │   ├── Voyager.Common.Proxy.Server.Core/      # Server core logic
 │   ├── Voyager.Common.Proxy.Server.AspNetCore/    # ASP.NET Core integration
