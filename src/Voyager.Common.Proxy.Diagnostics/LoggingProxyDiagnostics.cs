@@ -34,12 +34,14 @@ namespace Voyager.Common.Proxy.Diagnostics
         public void OnRequestStarting(RequestStartingEvent e)
         {
             _logger.LogDebug(
-                "Proxy request starting: {HttpMethod} {Url} [{ServiceName}.{MethodName}] CorrelationId={CorrelationId} User={UserLogin} Unit={UnitId}/{UnitType}",
+                "Proxy request starting: {HttpMethod} {Url} [{ServiceName}.{MethodName}] TraceId={TraceId} SpanId={SpanId} ParentSpanId={ParentSpanId} User={UserLogin} Unit={UnitId}/{UnitType}",
                 e.HttpMethod,
                 e.Url,
                 e.ServiceName,
                 e.MethodName,
-                e.CorrelationId,
+                e.TraceId,
+                e.SpanId,
+                e.ParentSpanId ?? "(root)",
                 e.UserLogin ?? "(anonymous)",
                 e.UnitId ?? "(none)",
                 e.UnitType ?? "(none)");
@@ -51,14 +53,16 @@ namespace Voyager.Common.Proxy.Diagnostics
             if (e.IsSuccess)
             {
                 _logger.LogDebug(
-                    "Proxy request completed: {HttpMethod} {Url} {StatusCode} in {Duration}ms [{ServiceName}.{MethodName}] CorrelationId={CorrelationId} User={UserLogin} Unit={UnitId}/{UnitType}",
+                    "Proxy request completed: {HttpMethod} {Url} {StatusCode} in {Duration}ms [{ServiceName}.{MethodName}] TraceId={TraceId} SpanId={SpanId} ParentSpanId={ParentSpanId} User={UserLogin} Unit={UnitId}/{UnitType}",
                     e.HttpMethod,
                     e.Url,
                     e.StatusCode,
                     e.Duration.TotalMilliseconds,
                     e.ServiceName,
                     e.MethodName,
-                    e.CorrelationId,
+                    e.TraceId,
+                    e.SpanId,
+                    e.ParentSpanId ?? "(root)",
                     e.UserLogin ?? "(anonymous)",
                     e.UnitId ?? "(none)",
                     e.UnitType ?? "(none)");
@@ -66,7 +70,7 @@ namespace Voyager.Common.Proxy.Diagnostics
             else
             {
                 _logger.LogWarning(
-                    "Proxy request failed: {HttpMethod} {Url} {StatusCode} in {Duration}ms [{ServiceName}.{MethodName}] Error={ErrorType}: {ErrorMessage} CorrelationId={CorrelationId} User={UserLogin} Unit={UnitId}/{UnitType}",
+                    "Proxy request failed: {HttpMethod} {Url} {StatusCode} in {Duration}ms [{ServiceName}.{MethodName}] Error={ErrorType}: {ErrorMessage} TraceId={TraceId} SpanId={SpanId} ParentSpanId={ParentSpanId} User={UserLogin} Unit={UnitId}/{UnitType}",
                     e.HttpMethod,
                     e.Url,
                     e.StatusCode,
@@ -75,7 +79,9 @@ namespace Voyager.Common.Proxy.Diagnostics
                     e.MethodName,
                     e.ErrorType,
                     e.ErrorMessage,
-                    e.CorrelationId,
+                    e.TraceId,
+                    e.SpanId,
+                    e.ParentSpanId ?? "(root)",
                     e.UserLogin ?? "(anonymous)",
                     e.UnitId ?? "(none)",
                     e.UnitType ?? "(none)");
@@ -86,7 +92,7 @@ namespace Voyager.Common.Proxy.Diagnostics
         public void OnRequestFailed(RequestFailedEvent e)
         {
             _logger.LogError(
-                "Proxy request exception: {HttpMethod} {Url} in {Duration}ms [{ServiceName}.{MethodName}] Exception={ExceptionType}: {ExceptionMessage} CorrelationId={CorrelationId} User={UserLogin} Unit={UnitId}/{UnitType}",
+                "Proxy request exception: {HttpMethod} {Url} in {Duration}ms [{ServiceName}.{MethodName}] Exception={ExceptionType}: {ExceptionMessage} TraceId={TraceId} SpanId={SpanId} ParentSpanId={ParentSpanId} User={UserLogin} Unit={UnitId}/{UnitType}",
                 e.HttpMethod,
                 e.Url,
                 e.Duration.TotalMilliseconds,
@@ -94,7 +100,9 @@ namespace Voyager.Common.Proxy.Diagnostics
                 e.MethodName,
                 e.ExceptionType,
                 e.ExceptionMessage,
-                e.CorrelationId,
+                e.TraceId,
+                e.SpanId,
+                e.ParentSpanId ?? "(root)",
                 e.UserLogin ?? "(anonymous)",
                 e.UnitId ?? "(none)",
                 e.UnitType ?? "(none)");
@@ -104,7 +112,7 @@ namespace Voyager.Common.Proxy.Diagnostics
         public void OnRetryAttempt(RetryAttemptEvent e)
         {
             _logger.LogWarning(
-                "Proxy retry attempt {AttemptNumber}/{MaxAttempts} for [{ServiceName}.{MethodName}] after {ErrorType}: {ErrorMessage}. Waiting {Delay}ms. CorrelationId={CorrelationId} User={UserLogin} Unit={UnitId}/{UnitType}",
+                "Proxy retry attempt {AttemptNumber}/{MaxAttempts} for [{ServiceName}.{MethodName}] after {ErrorType}: {ErrorMessage}. Waiting {Delay}ms. TraceId={TraceId} SpanId={SpanId} ParentSpanId={ParentSpanId} User={UserLogin} Unit={UnitId}/{UnitType}",
                 e.AttemptNumber,
                 e.MaxAttempts,
                 e.ServiceName,
@@ -112,7 +120,9 @@ namespace Voyager.Common.Proxy.Diagnostics
                 e.ErrorType,
                 e.ErrorMessage,
                 e.Delay.TotalMilliseconds,
-                e.CorrelationId,
+                e.TraceId,
+                e.SpanId,
+                e.ParentSpanId ?? "(root)",
                 e.UserLogin ?? "(anonymous)",
                 e.UnitId ?? "(none)",
                 e.UnitType ?? "(none)");

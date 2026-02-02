@@ -59,7 +59,7 @@ public class RequestDispatcher
     {
         var emitter = new ServerDiagnosticsEmitter(diagnosticsHandlers, requestContext);
         var userContext = emitter.CaptureUserContext();
-        var correlationId = ServerDiagnosticsEmitter.GetCorrelationId();
+        var traceContext = ServerDiagnosticsEmitter.GetTraceContext();
         var stopwatch = Stopwatch.StartNew();
         var serviceName = endpoint.ServiceType.Name;
         var methodName = endpoint.Method.Name;
@@ -73,7 +73,9 @@ public class RequestDispatcher
             MethodName = methodName,
             HttpMethod = httpMethod,
             Url = url,
-            CorrelationId = correlationId,
+            TraceId = traceContext.TraceId,
+            SpanId = traceContext.SpanId,
+            ParentSpanId = traceContext.ParentSpanId,
             UserLogin = userContext.UserLogin,
             UnitId = userContext.UnitId,
             UnitType = userContext.UnitType,
@@ -119,7 +121,9 @@ public class RequestDispatcher
                 StatusCode = statusCode,
                 Duration = stopwatch.Elapsed,
                 IsSuccess = isSuccess,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 ErrorType = errorType,
                 ErrorMessage = errorMessage,
                 UserLogin = userContext.UserLogin,
@@ -142,7 +146,9 @@ public class RequestDispatcher
                 Duration = stopwatch.Elapsed,
                 ExceptionType = ex.InnerException.GetType().FullName ?? ex.InnerException.GetType().Name,
                 ExceptionMessage = ex.InnerException.Message,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 UserLogin = userContext.UserLogin,
                 UnitId = userContext.UnitId,
                 UnitType = userContext.UnitType,
@@ -163,7 +169,9 @@ public class RequestDispatcher
                 StatusCode = 400, // Validation errors return 400
                 Duration = stopwatch.Elapsed,
                 IsSuccess = false,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 ErrorType = "Validation",
                 ErrorMessage = ex.Message,
                 UserLogin = userContext.UserLogin,
@@ -186,7 +194,9 @@ public class RequestDispatcher
                 Duration = stopwatch.Elapsed,
                 ExceptionType = ex.GetType().FullName ?? ex.GetType().Name,
                 ExceptionMessage = ex.Message,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 UserLogin = userContext.UserLogin,
                 UnitId = userContext.UnitId,
                 UnitType = userContext.UnitType,

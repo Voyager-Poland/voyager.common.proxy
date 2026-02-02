@@ -27,21 +27,50 @@ namespace Voyager.Common.Proxy.Client.Diagnostics
         }
 
         /// <summary>
-        /// Gets a new correlation ID for the current request.
-        /// Uses Activity.Current.TraceId if available (OpenTelemetry), otherwise generates new GUID.
+        /// Gets the W3C Trace Context for the current request.
+        /// Uses Activity.Current if available (OpenTelemetry), otherwise generates new IDs.
         /// </summary>
-        public static Guid GetCorrelationId()
+        public static TraceContext GetTraceContext()
         {
             var activity = Activity.Current;
             if (activity != null)
             {
-                var traceId = activity.TraceId.ToString();
-                if (Guid.TryParse(traceId, out var guid))
+                return new TraceContext
                 {
-                    return guid;
-                }
+                    TraceId = activity.TraceId.ToString(),
+                    SpanId = activity.SpanId.ToString(),
+                    ParentSpanId = activity.ParentSpanId == default ? null : activity.ParentSpanId.ToString()
+                };
             }
-            return Guid.NewGuid();
+
+            // Generate new trace context when no activity exists
+            return new TraceContext
+            {
+                TraceId = Guid.NewGuid().ToString("N"),
+                SpanId = Guid.NewGuid().ToString("N").Substring(0, 16),
+                ParentSpanId = null
+            };
+        }
+
+        /// <summary>
+        /// W3C Trace Context for distributed tracing.
+        /// </summary>
+        public sealed class TraceContext
+        {
+            /// <summary>
+            /// W3C Trace ID (32 hex characters).
+            /// </summary>
+            public string TraceId { get; set; } = string.Empty;
+
+            /// <summary>
+            /// W3C Span ID (16 hex characters).
+            /// </summary>
+            public string SpanId { get; set; } = string.Empty;
+
+            /// <summary>
+            /// W3C Parent Span ID (16 hex characters). Null for root spans.
+            /// </summary>
+            public string? ParentSpanId { get; set; }
         }
 
         /// <summary>

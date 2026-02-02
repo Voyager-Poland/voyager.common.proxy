@@ -175,12 +175,12 @@ namespace Voyager.Common.Proxy.Client.Internal
 
             // Capture user context once for entire retry sequence
             var userContext = _diagnostics.CaptureUserContext();
-            var correlationId = DiagnosticsEmitter.GetCorrelationId();
+            var traceContext = DiagnosticsEmitter.GetTraceContext();
 
             while (true)
             {
                 attempt++;
-                lastResult = await ExecuteHttpRequestAsync(method, args, resultType, correlationId, userContext).ConfigureAwait(false);
+                lastResult = await ExecuteHttpRequestAsync(method, args, resultType, traceContext, userContext).ConfigureAwait(false);
 
                 // Check if success
                 if (IsSuccessResult(lastResult.Result, resultType))
@@ -213,7 +213,9 @@ namespace Voyager.Common.Proxy.Client.Internal
                     WillRetry = true,
                     ErrorType = error.Type.ToString(),
                     ErrorMessage = error.Message,
-                    CorrelationId = correlationId,
+                    TraceId = traceContext.TraceId,
+                    SpanId = traceContext.SpanId,
+                    ParentSpanId = traceContext.ParentSpanId,
                     UserLogin = userContext.UserLogin,
                     UnitId = userContext.UnitId,
                     UnitType = userContext.UnitType,
@@ -268,15 +270,15 @@ namespace Voyager.Common.Proxy.Client.Internal
         private Task<HttpRequestResult> ExecuteHttpRequestAsync(MethodInfo method, object?[] args, Type resultType)
         {
             var userContext = _diagnostics.CaptureUserContext();
-            var correlationId = DiagnosticsEmitter.GetCorrelationId();
-            return ExecuteHttpRequestAsync(method, args, resultType, correlationId, userContext);
+            var traceContext = DiagnosticsEmitter.GetTraceContext();
+            return ExecuteHttpRequestAsync(method, args, resultType, traceContext, userContext);
         }
 
         private async Task<HttpRequestResult> ExecuteHttpRequestAsync(
             MethodInfo method,
             object?[] args,
             Type resultType,
-            Guid correlationId,
+            DiagnosticsEmitter.TraceContext traceContext,
             DiagnosticsEmitter.UserContext userContext)
         {
             var httpMethod = RouteBuilder.GetHttpMethod(method);
@@ -291,7 +293,9 @@ namespace Voyager.Common.Proxy.Client.Internal
                 MethodName = method.Name,
                 HttpMethod = httpMethodString,
                 Url = path,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 UserLogin = userContext.UserLogin,
                 UnitId = userContext.UnitId,
                 UnitType = userContext.UnitType,
@@ -336,7 +340,9 @@ namespace Voyager.Common.Proxy.Client.Internal
                     StatusCode = (int)response.StatusCode,
                     Duration = duration,
                     IsSuccess = isSuccess,
-                    CorrelationId = correlationId,
+                    TraceId = traceContext.TraceId,
+                    SpanId = traceContext.SpanId,
+                    ParentSpanId = traceContext.ParentSpanId,
                     ErrorType = error?.Type.ToString(),
                     ErrorMessage = error?.Message,
                     UserLogin = userContext.UserLogin,
@@ -350,25 +356,25 @@ namespace Voyager.Common.Proxy.Client.Internal
             catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
             {
                 var duration = GetElapsed(startTime);
-                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, traceContext, userContext);
                 return new HttpRequestResult(CreateTimeoutResult(resultType), 0);
             }
             catch (OperationCanceledException ex)
             {
                 var duration = GetElapsed(startTime);
-                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, traceContext, userContext);
                 return new HttpRequestResult(CreateCancelledResult(resultType), 0);
             }
             catch (HttpRequestException ex)
             {
                 var duration = GetElapsed(startTime);
-                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, traceContext, userContext);
                 return new HttpRequestResult(CreateConnectionErrorResult(resultType, ex.Message), 0);
             }
             catch (Exception ex)
             {
                 var duration = GetElapsed(startTime);
-                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, correlationId, userContext);
+                EmitRequestFailed(method.Name, httpMethodString, path, duration, ex, traceContext, userContext);
                 return new HttpRequestResult(CreateUnexpectedErrorResult(resultType, ex.Message), 0);
             }
         }
@@ -379,7 +385,7 @@ namespace Voyager.Common.Proxy.Client.Internal
             string url,
             TimeSpan duration,
             Exception ex,
-            Guid correlationId,
+            DiagnosticsEmitter.TraceContext traceContext,
             DiagnosticsEmitter.UserContext userContext)
         {
             _diagnostics.EmitRequestFailed(new RequestFailedEvent
@@ -391,7 +397,9 @@ namespace Voyager.Common.Proxy.Client.Internal
                 Duration = duration,
                 ExceptionType = ex.GetType().FullName ?? ex.GetType().Name,
                 ExceptionMessage = ex.Message,
-                CorrelationId = correlationId,
+                TraceId = traceContext.TraceId,
+                SpanId = traceContext.SpanId,
+                ParentSpanId = traceContext.ParentSpanId,
                 UserLogin = userContext.UserLogin,
                 UnitId = userContext.UnitId,
                 UnitType = userContext.UnitType,

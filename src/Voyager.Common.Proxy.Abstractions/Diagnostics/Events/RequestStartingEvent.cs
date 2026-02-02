@@ -31,9 +31,20 @@ namespace Voyager.Common.Proxy.Diagnostics
         public string Url { get; set; } = string.Empty;
 
         /// <summary>
-        /// Gets or sets the correlation ID for distributed tracing.
+        /// Gets or sets the W3C Trace ID (32 hex characters).
         /// </summary>
-        public Guid CorrelationId { get; set; }
+        public string TraceId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the W3C Span ID (16 hex characters) - unique per operation.
+        /// </summary>
+        public string SpanId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the W3C Parent Span ID (16 hex characters).
+        /// Null for root spans.
+        /// </summary>
+        public string? ParentSpanId { get; set; }
 
         /// <summary>
         /// Gets or sets the timestamp when the event occurred.
