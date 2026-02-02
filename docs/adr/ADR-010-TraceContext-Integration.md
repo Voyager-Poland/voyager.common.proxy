@@ -1,6 +1,6 @@
 # ADR-010: Integracja z Voyager.TraceContext
 
-**Status:** Zaproponowane
+**Status:** Częściowo zaimplementowane (Faza 1 ukończona)
 **Data:** 2026-02-02
 **Autor:** [Do uzupełnienia]
 
@@ -283,29 +283,29 @@ services.AddServiceProxy<IUserService>("...")
 
 ## Implementacja
 
-### Faza 1: Zmiany w Abstractions
+### Faza 1: Zmiany w Abstractions ✅ UKOŃCZONE
 
-- [ ] Dodać pola `TraceId`, `SpanId`, `ParentSpanId` do wszystkich eventów
-- [ ] Usunąć `ParentActivityId` (zastąpione przez `ParentSpanId`)
-- [ ] Zaktualizować dokumentację pól
+- [x] Dodać pola `TraceId`, `SpanId`, `ParentSpanId` do wszystkich eventów
+- [x] Usunąć `CorrelationId` (zastąpione przez TraceId/SpanId/ParentSpanId)
+- [x] Zaktualizować dokumentację pól
+- [x] Zaktualizować `DiagnosticsEmitter` i `ServerDiagnosticsEmitter` z `GetTraceContext()`
+- [x] Zaktualizować `LoggingProxyDiagnostics` z nowymi polami
 
-### Faza 2: Nowy pakiet Diagnostics.TraceContext
+### Faza 2: Nowy pakiet Diagnostics.TraceContext (opcjonalne)
 
 - [ ] Utworzyć projekt `Voyager.Common.Proxy.Diagnostics.TraceContext`
-- [ ] Implementacja `TraceContextAwareDiagnosticsEmitter`
+- [ ] Implementacja integracji z `ITraceContextAccessor`
 - [ ] Extension method `UseTraceContext()`
 - [ ] README.md z przykładami użycia
 - [ ] Testy jednostkowe
 
-### Faza 3: Aktualizacja istniejących emitterów
+### Faza 3: Integracja z OWIN (opcjonalne)
 
-- [ ] `DiagnosticsEmitter` (Client) - użyj TraceContext gdy dostępny
-- [ ] `ServerDiagnosticsEmitter` (Server.Core) - użyj TraceContext gdy dostępny
 - [ ] OWIN middleware - wsparcie dla `TraceContextAccessor` w opcjach
 
 ### Faza 4: Dokumentacja i przykłady
 
-- [ ] Aktualizacja README głównego projektu
+- [x] Aktualizacja README diagnostyki
 - [ ] Przykłady integracji z Serilog
 - [ ] Przykłady dla OWIN
 
