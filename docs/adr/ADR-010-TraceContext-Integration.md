@@ -8,7 +8,7 @@
 
 Obecna implementacja diagnostyki w `Voyager.Common.Proxy` ma ograniczone wsparcie dla distributed tracing:
 
-1. **Brak pełnego W3C Trace Context** - używamy tylko `CorrelationId` (Guid) zamiast pełnego trace/span/parent hierarchy
+1. **Brak pełnego W3C Trace Context** - brak pełnego trace/span/parent hierarchy
 2. **Brak child spans** - wszystkie operacje w ramach request mają ten sam ID
 3. **Duplikacja logiki** - `DiagnosticsEmitter.GetCorrelationId()` reimplementuje logikę dostępu do `Activity.Current`
 4. **Brak integracji z logowaniem** - trace context nie jest automatycznie dodawany do wszystkich logów
@@ -30,10 +30,10 @@ Tworzymy nowy pakiet **`Voyager.Common.Proxy.Diagnostics.TraceContext`** który 
 │                    Voyager.Common.Proxy.Abstractions                             │
 │                                                                                  │
 │  Diagnostics/Events/                                                             │
-│  ├── RequestStartingEvent      ──┬── CorrelationId (Guid) - backward compat     │
-│  ├── RequestCompletedEvent       ├── TraceId (string?)    - W3C 32 hex          │
-│  ├── RequestFailedEvent          ├── SpanId (string?)     - W3C 16 hex          │
-│  └── RetryAttemptEvent         ──┴── ParentSpanId (string?) - W3C 16 hex        │
+│  ├── RequestStartingEvent      ──┬── TraceId (string)     - W3C 32 hex          │
+│  ├── RequestCompletedEvent       ├── SpanId (string)      - W3C 16 hex          │
+│  ├── RequestFailedEvent          └── ParentSpanId (string?) - W3C 16 hex        │
+│  └── RetryAttemptEvent                                                          │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                         │
@@ -81,19 +81,13 @@ Tworzymy nowy pakiet **`Voyager.Common.Proxy.Diagnostics.TraceContext`** który 
 
 ### Zmiany w polach eventów diagnostycznych
 
-#### Pola które POZOSTAJĄ (backward compatibility)
-
-| Pole | Typ | Opis |
-|------|-----|------|
-| `CorrelationId` | `Guid` | Zachowane dla kompatybilności wstecznej. Generowane z `TraceId` (jeśli dostępne i parsowalne do Guid) lub nowy `Guid.NewGuid()` |
-
-#### Pola które DODAJEMY (W3C Trace Context)
+#### Pola W3C Trace Context
 
 | Pole | Typ | Opis | Źródło |
 |------|-----|------|--------|
-| `TraceId` | `string?` | 32-znakowy hex ID śledzenia | `ITraceContextAccessor.TraceId` |
-| `SpanId` | `string?` | 16-znakowy hex ID aktualnego span | `ITraceContextAccessor.SpanId` |
-| `ParentSpanId` | `string?` | 16-znakowy hex ID rodzica span | `ITraceContextAccessor.ParentSpanId` |
+| `TraceId` | `string` | 32-znakowy hex ID śledzenia | `ITraceContextAccessor.TraceId` |
+| `SpanId` | `string` | 16-znakowy hex ID aktualnego span | `ITraceContextAccessor.SpanId` |
+| `ParentSpanId` | `string?` | 16-znakowy hex ID rodzica span (null dla root spans) | `ITraceContextAccessor.ParentSpanId` |
 
 #### Pola które USUWAMY
 
@@ -115,26 +109,18 @@ public sealed class RequestStartingEvent
 
     // === Distributed Tracing (W3C Trace Context) ===
     /// <summary>
-    /// Correlation ID for backward compatibility.
-    /// Derived from TraceId if available, otherwise new Guid.
-    /// </summary>
-    public required Guid CorrelationId { get; init; }
-
-    /// <summary>
     /// W3C Trace ID (32 hex characters).
-    /// Null if TraceContext not available.
     /// </summary>
-    public string? TraceId { get; init; }
+    public required string TraceId { get; init; }
 
     /// <summary>
     /// W3C Span ID (16 hex characters) - unique per operation.
-    /// Null if TraceContext not available.
     /// </summary>
-    public string? SpanId { get; init; }
+    public required string SpanId { get; init; }
 
     /// <summary>
     /// W3C Parent Span ID (16 hex characters).
-    /// Null for root spans or if TraceContext not available.
+    /// Null for root spans.
     /// </summary>
     public string? ParentSpanId { get; init; }
 
@@ -154,35 +140,10 @@ public sealed class RequestStartingEvent
 // W DiagnosticsEmitter (po integracji):
 public static class TraceContextDiagnosticsEmitter
 {
-    public static (Guid correlationId, string? traceId, string? spanId, string? parentSpanId)
-        GetTraceContext(ITraceContextAccessor? accessor)
+    public static (string traceId, string spanId, string? parentSpanId)
+        GetTraceContext(ITraceContextAccessor accessor)
     {
-        if (accessor == null)
-        {
-            // Fallback: bez TraceContext
-            return (Guid.NewGuid(), null, null, null);
-        }
-
-        var traceId = accessor.TraceId;
-        var spanId = accessor.SpanId;
-        var parentSpanId = accessor.ParentSpanId;
-
-        // CorrelationId = TraceId jako Guid (jeśli możliwe)
-        var correlationId = TryParseTraceIdAsGuid(traceId) ?? Guid.NewGuid();
-
-        return (correlationId, traceId, spanId, parentSpanId);
-    }
-
-    private static Guid? TryParseTraceIdAsGuid(string? traceId)
-    {
-        if (string.IsNullOrEmpty(traceId)) return null;
-
-        // W3C TraceId to 32 hex chars, Guid to 32 hex chars bez myślników
-        // Można bezpośrednio sparsować
-        if (Guid.TryParse(traceId, out var guid))
-            return guid;
-
-        return null;
+        return (accessor.TraceId, accessor.SpanId, accessor.ParentSpanId);
     }
 }
 ```
@@ -229,21 +190,20 @@ public void Configuration(IAppBuilder app)
 
 | Proxy Diagnostics | TraceContext | Opis |
 |-------------------|--------------|------|
-| `CorrelationId` (Guid) | `TraceId` (string, parsowany) | Backward compat |
 | `TraceId` (string) | `ITraceContextAccessor.TraceId` | W3C 32 hex |
 | `SpanId` (string) | `ITraceContextAccessor.SpanId` | W3C 16 hex |
-| `ParentSpanId` (string) | `ITraceContextAccessor.ParentSpanId` | W3C 16 hex |
+| `ParentSpanId` (string?) | `ITraceContextAccessor.ParentSpanId` | W3C 16 hex |
 | ~~`ParentActivityId`~~ | (usunięte) | Zastąpione przez ParentSpanId |
 
 ### Korzyści z integracji
 
-| Aspekt | Przed | Po |
-|--------|-------|-----|
-| **Trace hierarchy** | Płaski (jeden ID per request) | Hierarchiczny (trace → span → child span) |
-| **Standard** | Własnościowy (Guid) | W3C Trace Context |
-| **Log correlation** | Tylko eventy proxy | Wszystkie logi (via SerilogTraceContextEnricher) |
-| **Cross-service** | Wymaga ręcznej propagacji | Automatyczna propagacja via traceparent header |
-| **Kibana queries** | `CorrelationId: "abc-123"` | `trace.id: "abc123..." AND span.id: "def456..."` |
+| Aspekt | Opis |
+|--------|------|
+| **Trace hierarchy** | Hierarchiczny (trace → span → child span) |
+| **Standard** | W3C Trace Context |
+| **Log correlation** | Wszystkie logi (via SerilogTraceContextEnricher) |
+| **Cross-service** | Automatyczna propagacja via traceparent header |
+| **Kibana queries** | `trace.id: "abc123..." AND span.id: "def456..."` |
 
 ### Struktura pakietu
 
@@ -318,15 +278,15 @@ services.AddServiceProxy<IUserService>("...")
 
 | Zmiana | Wpływ | Mitigacja |
 |--------|-------|-----------|
-| Dodanie `TraceId`, `SpanId`, `ParentSpanId` | Nowe pola w eventach | Backward compatible (nullable) |
+| Dodanie `TraceId`, `SpanId`, `ParentSpanId` | Nowe wymagane pola w eventach | Nowa funkcjonalność |
 | Usunięcie `ParentActivityId` | Potencjalny breaking change | Zastąpione przez `ParentSpanId` |
 
 ## Implementacja
 
-### Faza 1: Zmiany w Abstractions (minor)
+### Faza 1: Zmiany w Abstractions
 
 - [ ] Dodać pola `TraceId`, `SpanId`, `ParentSpanId` do wszystkich eventów
-- [ ] Oznaczyć `ParentActivityId` jako `[Obsolete]` (nie usuwać od razu)
+- [ ] Usunąć `ParentActivityId` (zastąpione przez `ParentSpanId`)
 - [ ] Zaktualizować dokumentację pól
 
 ### Faza 2: Nowy pakiet Diagnostics.TraceContext
