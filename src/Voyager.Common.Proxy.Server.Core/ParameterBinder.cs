@@ -160,16 +160,10 @@ public class ParameterBinder
 
         try
         {
-            // Reset stream position if possible
+            // Reset stream position if possible (for cases where middleware read the body)
             if (context.Body.CanSeek)
             {
                 context.Body.Position = 0;
-
-                // Check if stream is empty
-                if (context.Body.Length == 0)
-                {
-                    return param.IsOptional ? param.DefaultValue : null;
-                }
             }
 
             var result = await JsonSerializer.DeserializeAsync(context.Body, param.Type, JsonOptions, context.CancellationToken);
