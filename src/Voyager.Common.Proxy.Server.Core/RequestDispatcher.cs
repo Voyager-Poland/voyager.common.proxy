@@ -87,6 +87,12 @@ public class RequestDispatcher
             // Bind parameters
             var parameters = await _parameterBinder.BindParametersAsync(context, endpoint);
 
+            // Validate request parameters if method/interface has [ValidateRequest]
+            if (RequestValidator.ShouldValidate(endpoint))
+            {
+                RequestValidator.ValidateParameters(parameters);
+            }
+
             // Invoke method
             var result = endpoint.Method.Invoke(serviceInstance, parameters);
 

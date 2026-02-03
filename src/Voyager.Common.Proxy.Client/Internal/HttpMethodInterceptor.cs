@@ -3,12 +3,14 @@ namespace Voyager.Common.Proxy.Client.Internal
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Linq;
     using System.Net.Http;
     using System.Reflection;
     using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Voyager.Common.Proxy.Abstractions.Validation;
     using Voyager.Common.Proxy.Client.Abstractions;
     using Voyager.Common.Proxy.Client.Diagnostics;
     using Voyager.Common.Proxy.Diagnostics;
@@ -137,6 +139,16 @@ namespace Voyager.Common.Proxy.Client.Internal
                 throw new NotSupportedException(
                     $"Method {method.Name} must return Task<Result<T>> or Task<Result>. " +
                     $"Found: {returnType.Name}");
+            }
+
+            // Client-side validation (if enabled)
+            if (ShouldValidateClientSide(method))
+            {
+                var validationError = ValidateArguments(arguments);
+                if (validationError != null)
+                {
+                    return CreateFailureResult(resultType, validationError);
+                }
             }
 
             return await ExecuteWithResilienceAsync(method, arguments, resultType).ConfigureAwait(false);
@@ -452,6 +464,118 @@ namespace Voyager.Common.Proxy.Client.Internal
             }
 
             return false;
+        }
+
+        private static bool ShouldValidateClientSide(MethodInfo method)
+        {
+            // Check method-level attribute first
+            var methodAttr = method.GetCustomAttribute<ValidateRequestAttribute>();
+            if (methodAttr != null)
+            {
+                return methodAttr.ClientSide;
+            }
+
+            // Check interface-level attribute
+            var interfaceAttr = method.DeclaringType?.GetCustomAttribute<ValidateRequestAttribute>();
+            if (interfaceAttr != null)
+            {
+                return interfaceAttr.ClientSide;
+            }
+
+            return false;
+        }
+
+        private static Error? ValidateArguments(object?[] arguments)
+        {
+            foreach (var arg in arguments)
+            {
+                if (arg == null) continue;
+
+                // Approach 1: Interface - IValidatableRequest
+                if (arg is IValidatableRequest validatable)
+                {
+                    var result = validatable.IsValid();
+                    if (!result.IsSuccess)
+                    {
+                        return result.Error;
+                    }
+                    continue;
+                }
+
+                // Approach 1: Interface - IValidatableRequestBool
+                if (arg is IValidatableRequestBool validatableBool)
+                {
+                    if (!validatableBool.IsValid())
+                    {
+                        var message = validatableBool.ValidationErrorMessage ?? "Request validation failed";
+                        return Error.ValidationError(message);
+                    }
+                    continue;
+                }
+
+                // Approach 2: Attribute [ValidationMethod]
+                var validationMethod = arg.GetType()
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.GetCustomAttribute<ValidationMethodAttribute>() != null);
+
+                if (validationMethod != null)
+                {
+                    var error = ValidateWithAttributeMethod(arg, validationMethod);
+                    if (error != null)
+                    {
+                        return error;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static Error? ValidateWithAttributeMethod(object param, MethodInfo method)
+        {
+            var attr = method.GetCustomAttribute<ValidationMethodAttribute>()!;
+            var returnType = method.ReturnType;
+
+            // Method must have no parameters
+            if (method.GetParameters().Length > 0)
+            {
+                return Error.ValidationError(
+                    $"[ValidationMethod] must have no parameters, but {method.DeclaringType?.Name}.{method.Name} has {method.GetParameters().Length} parameters");
+            }
+
+            object? result;
+            try
+            {
+                result = method.Invoke(param, null);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                return Error.ValidationError($"Validation method threw an exception: {ex.InnerException.Message}");
+            }
+
+            // Handle Result return type
+            if (typeof(Result).IsAssignableFrom(returnType))
+            {
+                if (result is Result resultValue && !resultValue.IsSuccess)
+                {
+                    return resultValue.Error;
+                }
+            }
+            // Handle bool return type
+            else if (returnType == typeof(bool))
+            {
+                if (result is bool boolValue && !boolValue)
+                {
+                    return Error.ValidationError(attr.ErrorMessage ?? "Request validation failed");
+                }
+            }
+            else
+            {
+                return Error.ValidationError(
+                    $"[ValidationMethod] must return Result or bool, but {method.DeclaringType?.Name}.{method.Name} returns {returnType.Name}");
+            }
+
+            return null;
         }
 
         private static object CreateCancelledResult(Type resultType)

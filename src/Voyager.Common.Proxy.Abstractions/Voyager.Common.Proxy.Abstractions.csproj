@@ -7,12 +7,17 @@
     <Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy generation</Description>
     <PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Suppress compatibility warning for Voyager.Common.Results on netstandard2.0 -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- No external dependencies - this is a pure abstractions library -->
+  <ItemGroup>
+    <!-- Required for IValidatableRequest which returns Result -->
+    <PackageReference Include="Voyager.Common.Results" Version="1.7.0-preview.2" />
+  </ItemGroup>
 
 </Project>
