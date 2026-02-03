@@ -21,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Voyager.Common.Results" Version="1.7.0-preview.2" />
-    <PackageReference Include="Voyager.Common.Resilience" Version="1.7.0-preview.2" />
+    <PackageReference Include="Voyager.Common.Results" Version="1.7.1" />
+    <PackageReference Include="Voyager.Common.Resilience" Version="1.7.1" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
   </ItemGroup>
 
