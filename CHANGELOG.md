@@ -24,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking:** HTTP 429 now returns `ErrorType.TooManyRequests` instead of `ErrorType.Unavailable` (ADR-009)
-- Upgraded `Voyager.Common.Results` dependency to 1.7.0-preview.2
-- Upgraded `Voyager.Common.Resilience` dependency to 1.7.0-preview.2
+- Upgraded `Voyager.Common.Results` dependency to 1.7.0
+- Upgraded `Voyager.Common.Resilience` dependency to 1.7.0
 - `AspNetCoreResponseWriter` and `OwinResponseWriter` now use centralized `ErrorType.ToHttpStatusCode()` extension
 - `HttpMethodInterceptor` now uses `error.Type.IsTransient()` from `Voyager.Common.Results.Extensions`
 

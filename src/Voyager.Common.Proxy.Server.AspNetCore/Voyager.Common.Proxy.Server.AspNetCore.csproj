@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Voyager.Common.Results" Version="1.7.0-preview.2" />
+    <PackageReference Include="Voyager.Common.Results" Version="1.7.0" />
   </ItemGroup>
 
   <ItemGroup>
