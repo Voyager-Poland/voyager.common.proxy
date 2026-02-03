@@ -10,6 +10,7 @@ This package contains the shared implementation used by both `Voyager.Common.Pro
 
 - **`ServiceScanner`** - Scans service interfaces and builds endpoint descriptors using the same routing conventions as `Voyager.Common.Proxy.Client`
 - **`RequestDispatcher`** - Invokes service methods based on HTTP requests and writes responses
+- **`RequestValidator`** - Validates request parameters before method execution
 - **`ParameterBinder`** - Binds request parameters from route values, query strings, and request body
 - **`EndpointMatcher`** - Matches incoming HTTP requests to registered endpoints
 
@@ -71,6 +72,85 @@ services.AddServiceProxy<IPaymentService>(options =>
 ```
 
 See [Voyager.Common.Proxy.Client](../Voyager.Common.Proxy.Client/README.md) for details.
+
+## Request Validation
+
+The `RequestDispatcher` supports automatic validation of request parameters when `[ValidateRequest]` attribute is present on the method or interface.
+
+### How It Works
+
+1. Before invoking the service method, `RequestValidator` checks all parameters
+2. Parameters implementing `IValidatableRequest` or `IValidatableRequestBool` are validated
+3. Parameters with `[ValidationMethod]` attribute have that method invoked
+4. On validation failure, `ArgumentException` is thrown and caught by existing error handling
+5. HTTP 400 response is returned with `ErrorType="Validation"`
+
+### Validation Flow
+
+```
+HTTP Request
+    │
+    ▼
+RequestDispatcher
+    │
+    ├─► Deserialize parameters
+    │
+    ├─► Check [ValidateRequest] attribute
+    │     │
+    │     └─► RequestValidator.ValidateParameters()
+    │           │
+    │           ├─ IValidatableRequest.IsValid() → Result
+    │           ├─ IValidatableRequestBool.IsValid() → bool
+    │           └─ [ValidationMethod] → Result or bool
+    │
+    ├─► On failure: throw ArgumentException
+    │     │
+    │     └─► HTTP 400 + ErrorType="Validation"
+    │
+    └─► On success: Invoke service method
+```
+
+### Supported Validation Approaches
+
+| Approach | Detection | Performance |
+|----------|-----------|-------------|
+| `IValidatableRequest` | Interface cast | Fast |
+| `IValidatableRequestBool` | Interface cast | Fast |
+| `[ValidationMethod]` | Reflection | Slower |
+
+### Example
+
+```csharp
+// Service interface with validation
+[ValidateRequest]
+public interface IPaymentService
+{
+    Task<Result<Payment>> CreatePaymentAsync(CreatePaymentRequest request);
+}
+
+// Request model with validation
+public class CreatePaymentRequest : IValidatableRequest
+{
+    public decimal Amount { get; set; }
+    public string Currency { get; set; }
+
+    public Result IsValid()
+    {
+        if (Amount <= 0)
+            return Result.Failure(Error.ValidationError("Amount must be positive"));
+        if (string.IsNullOrEmpty(Currency))
+            return Result.Failure(Error.ValidationError("Currency is required"));
+        return Result.Success();
+    }
+}
+```
+
+When an invalid request is received, the response will be:
+```
+HTTP 400 Bad Request
+ErrorType: Validation
+ErrorMessage: Amount must be positive
+```
 
 ## Target Framework
 

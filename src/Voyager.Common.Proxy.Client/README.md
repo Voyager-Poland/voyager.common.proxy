@@ -632,6 +632,81 @@ services.AddServiceProxy<IUserService>(options =>
 });
 ```
 
+## Client-Side Request Validation
+
+When `[ValidateRequest(ClientSide = true)]` is set, the proxy validates request parameters before making an HTTP call. This is an optimization to avoid network traffic for invalid requests.
+
+### How It Works
+
+```
+Proxy Method Call
+    │
+    ├─► Check [ValidateRequest(ClientSide = true)]
+    │     │
+    │     └─► ValidateArguments()
+    │           │
+    │           ├─ IValidatableRequest.IsValid() → Result
+    │           ├─ IValidatableRequestBool.IsValid() → bool
+    │           └─ [ValidationMethod] → Result or bool
+    │
+    ├─► On failure: Return Result.Failure(Error.ValidationError)
+    │     │
+    │     └─► NO HTTP call made
+    │
+    └─► On success: Make HTTP request
+          │
+          └─► Server validates AGAIN (security)
+```
+
+### Example
+
+```csharp
+// Service interface with client-side validation
+[ValidateRequest(ClientSide = true)]
+public interface IPaymentService
+{
+    Task<Result<Payment>> CreatePaymentAsync(CreatePaymentRequest request);
+}
+
+// Request with validation
+public class CreatePaymentRequest : IValidatableRequest
+{
+    public decimal Amount { get; set; }
+    public string Currency { get; set; }
+
+    public Result IsValid()
+    {
+        if (Amount <= 0)
+            return Result.Failure(Error.ValidationError("Amount must be positive"));
+        return Result.Success();
+    }
+}
+
+// Usage
+var result = await _paymentService.CreatePaymentAsync(new CreatePaymentRequest
+{
+    Amount = -10,  // Invalid!
+    Currency = "USD"
+});
+
+// Result is failure - NO HTTP call was made
+result.IsFailure;  // true
+result.Error.Type;  // ErrorType.Validation
+result.Error.Message;  // "Amount must be positive"
+```
+
+### When to Use Client-Side Validation
+
+| Scenario | Use `ClientSide = true` |
+|----------|-------------------------|
+| High network latency | ✅ Save roundtrip time |
+| Expensive validation | ❌ Validate once on server |
+| Security-critical | ❌ Server always validates anyway |
+| Shared request models | ✅ Reuse validation logic |
+| Simple validation | ✅ Quick fail for obvious errors |
+
+**Note:** Server-side validation ALWAYS happens regardless of `ClientSide` setting. Client validation is an optimization, not a security measure.
+
 ## Supported Method Signatures
 
 All methods must:

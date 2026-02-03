@@ -137,6 +137,8 @@ Task<Result<List<Order>>> GetUserOrdersAsync(int id, string? status, int? limit)
 
 ## Available Attributes
 
+### Routing Attributes
+
 | Attribute | Target | Description |
 |-----------|--------|-------------|
 | `[ServiceRoute("prefix")]` | Interface | Sets base route prefix for all methods |
@@ -148,6 +150,98 @@ Task<Result<List<Order>>> GetUserOrdersAsync(int id, string? status, int? limit)
 | `[HttpMethod(method, "template")]` | Method | Base attribute for custom scenarios |
 
 All template parameters are optional - when omitted, routes are derived from method names.
+
+### Validation Attributes
+
+| Attribute | Target | Description |
+|-----------|--------|-------------|
+| `[ValidateRequest]` | Method, Interface | Enables automatic request validation (server-side) |
+| `[ValidateRequest(ClientSide = true)]` | Method, Interface | Enables validation on both client and server |
+| `[ValidationMethod]` | Method | Marks a method as validation method (for existing models) |
+| `[ValidationMethod(ErrorMessage = "...")]` | Method | With custom error message for bool methods |
+
+### Validation Interfaces
+
+| Interface | Description |
+|-----------|-------------|
+| `IValidatableRequest` | Implement to add validation returning `Result` |
+| `IValidatableRequestBool` | Implement to add simple bool validation |
+
+## Request Validation
+
+Enable automatic validation of request parameters before method execution.
+
+### Using Interfaces (Recommended)
+
+```csharp
+using Voyager.Common.Proxy.Abstractions.Validation;
+
+public class CreatePaymentRequest : IValidatableRequest
+{
+    public decimal Amount { get; set; }
+    public string Currency { get; set; }
+
+    public Result IsValid()
+    {
+        if (Amount <= 0)
+            return Result.Failure(Error.ValidationError("Amount must be positive"));
+        if (string.IsNullOrEmpty(Currency))
+            return Result.Failure(Error.ValidationError("Currency is required"));
+        return Result.Success();
+    }
+}
+
+// Simple bool validation
+public class SimpleRequest : IValidatableRequestBool
+{
+    public int Id { get; set; }
+
+    public bool IsValid() => Id > 0;
+    public string? ValidationErrorMessage => Id <= 0 ? "Id must be positive" : null;
+}
+```
+
+### Using Attributes (For Existing Models)
+
+```csharp
+// Add [ValidationMethod] to existing validation methods
+public class LegacyPaymentRequest
+{
+    public decimal Amount { get; set; }
+
+    [ValidationMethod]
+    public Result Validate()  // Any name works
+    {
+        if (Amount <= 0)
+            return Result.Failure(Error.ValidationError("Amount must be positive"));
+        return Result.Success();
+    }
+}
+
+// Bool validation with custom message
+public class BookingRequest
+{
+    public int BookingId { get; set; }
+
+    [ValidationMethod(ErrorMessage = "BookingId must be positive")]
+    public bool CheckValid() => BookingId > 0;
+}
+```
+
+### Enabling Validation on Service Interface
+
+```csharp
+[ValidateRequest]  // All methods validate on server
+public interface IPaymentService
+{
+    Task<Result<Payment>> CreatePaymentAsync(CreatePaymentRequest request);
+
+    [ValidateRequest(ClientSide = true)]  // This method also validates on client
+    Task<Result> ValidatePaymentAsync(ValidatePaymentRequest request);
+}
+```
+
+**Note:** Server-side validation always happens when `[ValidateRequest]` is present. `ClientSide = true` adds client-side validation as an optimization to avoid unnecessary HTTP calls.
 
 ## Supported Frameworks
 
