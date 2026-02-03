@@ -386,6 +386,67 @@ services.AddServiceProxy<IUserService>("https://api.example.com")
     .AddHttpMessageHandler<CorrelationIdHandler>();    // 3. Add correlation ID
 ```
 
+### Alternative: DelegatingHandlerFactories (Unity/DI Bridging)
+
+In some scenarios, `AddHttpMessageHandler<T>()` may not work correctly—particularly when using DI container bridges (e.g., Unity adapter for `Microsoft.Extensions.DependencyInjection`). The handlers may not be resolved or the pipeline may not be constructed properly.
+
+For these cases, use `DelegatingHandlerFactories` which builds the HTTP pipeline manually:
+
+```csharp
+// ASP.NET Core or OWIN - works reliably with Unity and other DI bridges
+services.AddServiceProxy<IPaymentService>(options =>
+{
+    options.BaseUrl = new Uri("https://api.internal.com");
+
+    // Add handlers via factories - bypasses IHttpClientFactory.AddHttpMessageHandler
+    options.DelegatingHandlerFactories.Add(sp =>
+        sp.GetRequiredService<LoggingHandler>());
+    options.DelegatingHandlerFactories.Add(sp =>
+        sp.GetRequiredService<ForwardAuthorizationHandler>());
+});
+
+// Don't forget to register the handlers
+services.AddTransient<LoggingHandler>();
+services.AddTransient<ForwardAuthorizationHandler>();
+```
+
+**OWIN / .NET Framework 4.8 with Unity:**
+
+```csharp
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var services = new ServiceCollection();
+
+        // Register handlers
+        services.AddTransient<OwinForwardAuthorizationHandler>();
+        services.AddTransient<LoggingHandler>();
+
+        // Use DelegatingHandlerFactories instead of AddHttpMessageHandler
+        services.AddServiceProxy<IPaymentService>(options =>
+        {
+            options.BaseUrl = new Uri("https://api.internal.com");
+            options.DelegatingHandlerFactories.Add(sp =>
+                sp.GetRequiredService<LoggingHandler>());
+            options.DelegatingHandlerFactories.Add(sp =>
+                sp.GetRequiredService<OwinForwardAuthorizationHandler>());
+        });
+
+        // Bridge to Unity container
+        var serviceProvider = services.BuildServiceProvider();
+        // ... configure Unity adapter
+    }
+}
+```
+
+**When to use DelegatingHandlerFactories:**
+- Unity container bridging scenarios
+- Other DI container adapters where `AddHttpMessageHandler` doesn't work
+- When you need full control over handler pipeline construction
+
+**Execution order:** Handlers execute in the order they are added (first added = outermost, receives request first).
+
 ## Polly Integration
 
 Add resilience policies using [Microsoft.Extensions.Http.Polly](https://www.nuget.org/packages/Microsoft.Extensions.Http.Polly):
