@@ -1,23 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <!-- Include netstandard2.0 for Server.Core compatibility -->
-    <TargetFrameworks>netstandard2.0;net48;net6.0;net8.0</TargetFrameworks>
-    <LangVersion>latest</LangVersion>
-    <Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy generation</Description>
-    <PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- Suppress compatibility warning for Voyager.Common.Results on netstandard2.0 -->
-    <NoWarn>$(NoWarn);NU1701</NoWarn>
-  </PropertyGroup>
+	<PropertyGroup>
+		<!-- Include netstandard2.0 for Server.Core compatibility -->
+		<TargetFrameworks>netstandard2.0;net48;net6.0;net8.0</TargetFrameworks>
+		<LangVersion>latest</LangVersion>
+		<Description>Abstractions and attributes for Voyager.Common.Proxy - HTTP service proxy
+			generation</Description>
+		<PackageTags>http;proxy;rest;api;attributes;abstractions</PackageTags>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<!-- Suppress compatibility warning for Voyager.Common.Results on netstandard2.0 -->
+		<NoWarn>$(NoWarn);NU1701</NoWarn>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <!-- Required for IValidatableRequest which returns Result -->
-    <PackageReference Include="Voyager.Common.Results" Version="1.7.0-preview.2" />
-  </ItemGroup>
+	<ItemGroup>
+		<!-- Required for IValidatableRequest which returns Result -->
+		<PackageReference Include="Voyager.Common.Results" Version="1.7.0" />
+	</ItemGroup>
 
 </Project>

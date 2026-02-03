@@ -722,12 +722,12 @@ public sealed class ProxyEventSource : EventSource
 | `OnRequestStarting` | `ExecuteHttpRequestAsync()` - przed `_httpClient.SendAsync()` | Linia ~225 |
 | `OnRequestCompleted` | `ExecuteHttpRequestAsync()` - po `ResultMapper.MapResponseAsync()` | Linia ~242 |
 | `OnRequestFailed` | `ExecuteHttpRequestAsync()` - w bloku `catch` | Linie 243-258 |
-| `OnRetryAttempt` | Callback `onRetryAttempt` w `BindWithRetryAsync()` | Voyager.Common.Results 1.7.0-preview.2 |
-| `OnCircuitBreakerStateChanged` | Callback `OnStateChanged` w `CircuitBreakerPolicy` | Voyager.Common.Resilience 1.7.0-preview.2 |
+| `OnRetryAttempt` | Callback `onRetryAttempt` w `BindWithRetryAsync()` | Voyager.Common.Results 1.7.0 |
+| `OnCircuitBreakerStateChanged` | Callback `OnStateChanged` w `CircuitBreakerPolicy` | Voyager.Common.Resilience 1.7.0 |
 
 ### Rozwiązanie: Circuit Breaker State Changes
 
-Od wersji **Voyager.Common.Resilience 1.7.0-preview.2** dostępny jest callback `OnStateChanged`:
+Od wersji **Voyager.Common.Resilience 1.7.0** dostępny jest callback `OnStateChanged`:
 
 ```csharp
 _circuitBreaker.OnStateChanged = (oldState, newState, failures, lastError) =>
@@ -832,7 +832,7 @@ namespace Voyager.Common.Proxy.Client.Internal
 
 ### Rozwiązanie: Retry Attempt Callbacks
 
-Od wersji **Voyager.Common.Results 1.7.0-preview.2** dostępny jest callback `onRetryAttempt` w `BindWithRetryAsync`:
+Od wersji **Voyager.Common.Results 1.7.0** dostępny jest callback `onRetryAttempt` w `BindWithRetryAsync`:
 
 - [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md)
 
@@ -1144,6 +1144,6 @@ services.AddProxyDiagnostics<SlackAlertingDiagnostics>();
 - [Application Insights](https://docs.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview)
 - [OpenTelemetry .NET](https://opentelemetry.io/docs/instrumentation/net/)
 
-**Zależności od Voyager.Common.Results/Resilience (wersja 1.7.0-preview.2):**
+**Zależności od Voyager.Common.Results/Resilience (wersja 1.7.0):**
 - [ADR-0008: Circuit Breaker State Change Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0008-circuit-breaker-state-change-callbacks.md) - zaimplementowane
 - [ADR-0009: Retry Attempt Callbacks](file:///C:/src/Voyager.Common.Results/docs/adr/ADR-0009-retry-attempt-callbacks.md) - zaimplementowane
