@@ -84,8 +84,55 @@ public class UserController
 ### Parameter Mapping
 
 - **Simple types** (int, string, Guid, etc.) → Query string parameters
-- **Complex types** (classes, records) → JSON body (for POST, PUT, PATCH)
+- **Complex types** (classes, records):
+  - For **POST, PUT, PATCH** → JSON body
+  - For **GET, DELETE** → Properties extracted as query string parameters
 - **CancellationToken** → Used for request cancellation, not sent
+
+### Complex Types in GET/DELETE Requests
+
+For GET and DELETE methods, complex type parameters are automatically decomposed into query string parameters:
+
+```csharp
+public class SearchQuery
+{
+    public string? Name { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public interface IUserService
+{
+    Task<Result<List<User>>> GetUsersAsync(SearchQuery query);
+    // GetUsersAsync(new SearchQuery { Name = "john", Page = 1, PageSize = 10 })
+    // → GET /user-service/get-users?Name=john&Page=1&PageSize=10
+}
+```
+
+Properties can also be used in route templates:
+
+```csharp
+public class UserOrdersQuery
+{
+    public int UserId { get; set; }
+    public string? Status { get; set; }
+    public int Page { get; set; }
+}
+
+public interface IOrderService
+{
+    [HttpGet("users/{UserId}/orders")]
+    Task<Result<List<Order>>> GetUserOrdersAsync(UserOrdersQuery query);
+    // GetUserOrdersAsync(new UserOrdersQuery { UserId = 123, Status = "pending", Page = 1 })
+    // → GET /order-service/users/123/orders?Status=pending&Page=1
+}
+```
+
+**Rules:**
+- Null properties are omitted from query string
+- Properties used in route template are not duplicated in query string
+- Nested complex types are skipped (only simple types are extracted)
+- For POST/PUT/PATCH, complex types still become JSON body
 
 ### HTTP Status Code → Result Mapping
 

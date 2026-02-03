@@ -94,10 +94,42 @@ namespace Voyager.Common.Proxy.Client.Internal
             var parameters = method.GetParameters();
             var attribute = method.GetCustomAttribute<HttpMethodAttribute>();
             var template = attribute?.Template;
+            var httpMethod = GetHttpMethod(method);
 
             string path;
             var usedParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             object? body = null;
+
+            // For GET/DELETE with complex types, extract properties for route/query binding
+            var propertyValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var param = parameters[i];
+                var value = args[i];
+
+                if (param.ParameterType == typeof(CancellationToken))
+                {
+                    continue;
+                }
+
+                // For GET/DELETE: extract properties from complex types
+                if (IsComplexType(param.ParameterType) &&
+                    (httpMethod == ProxyHttpMethod.Get || httpMethod == ProxyHttpMethod.Delete) &&
+                    value != null)
+                {
+                    foreach (var prop in param.ParameterType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        if (prop.CanRead && !IsComplexType(prop.PropertyType))
+                        {
+                            var propValue = prop.GetValue(value);
+                            if (propValue != null)
+                            {
+                                propertyValues[prop.Name] = propValue;
+                            }
+                        }
+                    }
+                }
+            }
 
             if (!string.IsNullOrEmpty(template))
             {
@@ -110,11 +142,17 @@ namespace Voyager.Common.Proxy.Client.Internal
                     var paramName = match.Groups[1].Value;
                     usedParameters.Add(paramName);
 
+                    // First try method parameter
                     var paramIndex = FindParameterIndex(parameters, paramName);
                     if (paramIndex >= 0 && paramIndex < args.Length)
                     {
                         var value = args[paramIndex];
                         path = path.Replace(match.Value, Uri.EscapeDataString(value?.ToString() ?? ""));
+                    }
+                    // Then try properties from complex types (for GET/DELETE)
+                    else if (propertyValues.TryGetValue(paramName, out var propValue))
+                    {
+                        path = path.Replace(match.Value, Uri.EscapeDataString(propValue?.ToString() ?? ""));
                     }
                 }
 
@@ -135,7 +173,6 @@ namespace Voyager.Common.Proxy.Client.Internal
 
             // Build query string and find body
             var queryParams = new List<string>();
-            var httpMethod = GetHttpMethod(method);
 
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -161,6 +198,29 @@ namespace Voyager.Common.Proxy.Client.Internal
                      httpMethod == ProxyHttpMethod.Patch))
                 {
                     body = value;
+                }
+                // For GET/DELETE with complex types: use extracted properties as query params
+                else if (IsComplexType(param.ParameterType) &&
+                         (httpMethod == ProxyHttpMethod.Get || httpMethod == ProxyHttpMethod.Delete) &&
+                         value != null)
+                {
+                    foreach (var prop in param.ParameterType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        if (prop.CanRead && !IsComplexType(prop.PropertyType))
+                        {
+                            // Skip properties already used in route
+                            if (usedParameters.Contains(prop.Name))
+                            {
+                                continue;
+                            }
+
+                            var propValue = prop.GetValue(value);
+                            if (propValue != null)
+                            {
+                                queryParams.Add($"{Uri.EscapeDataString(prop.Name)}={Uri.EscapeDataString(propValue.ToString()!)}");
+                            }
+                        }
+                    }
                 }
                 else if (value != null)
                 {

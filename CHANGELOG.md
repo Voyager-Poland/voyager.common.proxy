@@ -5,9 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.7.1] - 2026-02-03
 
 ### Added
+
+- **Complex type support for GET/DELETE requests** in `RouteBuilder`:
+  - Properties from complex type parameters are now extracted and used as query string parameters
+  - Route template placeholders (e.g., `{UserId}`) can bind to properties from complex types
+  - Nested complex properties are automatically skipped (only simple types are extracted)
+  - Null properties are omitted from query string
+  - Example: `GetUsersAsync(SearchQuery query)` with `SearchQuery { Name = "john", Page = 1 }` → `GET /get-users?Name=john&Page=1`
+  - Example: `[HttpGet("users/{UserId}/orders")] GetUserOrdersAsync(UserOrdersQuery query)` with `UserId = 123, Status = "pending"` → `GET /users/123/orders?Status=pending`
 
 - **ADR-011: Automatic Request Validation** - complete implementation:
   - `IValidatableRequest` interface for validation returning `Result`

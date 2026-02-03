@@ -227,6 +227,122 @@ public class RouteBuilderTests
         url.Should().NotContain("async");
     }
 
+    [Fact]
+    public void BuildRequest_GetWithComplexType_ExtractsPropertiesToQueryString()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetUsersAsync))!;
+        var query = new SearchQuery { Name = "john", Page = 1, PageSize = 10 };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/get-users?Name=john&Page=1&PageSize=10");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_GetWithComplexType_SkipsNullProperties()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetUsersAsync))!;
+        var query = new SearchQuery { Name = null, Page = 1, PageSize = 10 };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/get-users?Page=1&PageSize=10");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_GetWithComplexType_NullObject_NoQueryString()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetUsersAsync))!;
+        var args = new object?[] { null };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/get-users");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_DeleteWithComplexType_ExtractsPropertiesToQueryString()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.DeleteUsersAsync))!;
+        var query = new DeleteQuery { Status = "inactive", OlderThanDays = 30 };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/delete-users?Status=inactive&OlderThanDays=30");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_GetWithRouteTemplateAndComplexType_UsesPropertyInRoute()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetUserOrdersAsync))!;
+        var query = new UserOrdersQuery { UserId = 123, Status = "pending", Page = 1 };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/users/123/orders?Status=pending&Page=1");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_DeleteWithRouteTemplateAndComplexType_UsesPropertyInRoute()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.DeleteUserOrdersAsync))!;
+        var query = new DeleteUserOrdersQuery { UserId = 456, Status = "cancelled" };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/users/456/orders?Status=cancelled");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_GetWithComplexType_SkipsComplexNestedProperties()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetWithNestedAsync))!;
+        var query = new QueryWithNestedType { Id = 1, Name = "test", Nested = new NestedType { Value = "ignored" } };
+        var args = new object?[] { query };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/get-with-nested?Id=1&Name=test");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_GetWithComplexTypeAndSimpleParams_CombinesBoth()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.GetFilteredAsync))!;
+        var query = new SearchQuery { Name = "john", Page = 1, PageSize = 10 };
+        var args = new object?[] { query, "active" };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/get-filtered?Name=john&Page=1&PageSize=10&status=active");
+        body.Should().BeNull();
+    }
+
+    [Fact]
+    public void BuildRequest_PostWithComplexType_StillUsesBody()
+    {
+        var method = typeof(ISearchService).GetMethod(nameof(ISearchService.CreateSearchAsync))!;
+        var request = new SearchQuery { Name = "john", Page = 1, PageSize = 10 };
+        var args = new object?[] { request };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "search-service");
+
+        url.Should().Be("/search-service/create-search");
+        body.Should().BeSameAs(request);
+    }
+
     #endregion
 
     #region Helper Methods
@@ -311,6 +427,60 @@ public class RouteBuilderTests
     {
         public string Name { get; set; } = "";
         public string Email { get; set; } = "";
+    }
+
+    public interface ISearchService
+    {
+        Task<Result<List<User>>> GetUsersAsync(SearchQuery query);
+        Task<Result> DeleteUsersAsync(DeleteQuery query);
+
+        [HttpGet("users/{UserId}/orders")]
+        Task<Result<List<object>>> GetUserOrdersAsync(UserOrdersQuery query);
+
+        [HttpDelete("users/{UserId}/orders")]
+        Task<Result> DeleteUserOrdersAsync(DeleteUserOrdersQuery query);
+
+        Task<Result<object>> GetWithNestedAsync(QueryWithNestedType query);
+        Task<Result<List<User>>> GetFilteredAsync(SearchQuery query, string status);
+        Task<Result<object>> CreateSearchAsync(SearchQuery request);
+    }
+
+    public class SearchQuery
+    {
+        public string? Name { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+
+    public class DeleteQuery
+    {
+        public string? Status { get; set; }
+        public int OlderThanDays { get; set; }
+    }
+
+    public class UserOrdersQuery
+    {
+        public int UserId { get; set; }
+        public string? Status { get; set; }
+        public int Page { get; set; }
+    }
+
+    public class DeleteUserOrdersQuery
+    {
+        public int UserId { get; set; }
+        public string? Status { get; set; }
+    }
+
+    public class QueryWithNestedType
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public NestedType? Nested { get; set; }
+    }
+
+    public class NestedType
+    {
+        public string? Value { get; set; }
     }
 
     #endregion
