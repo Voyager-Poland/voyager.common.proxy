@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-011: Automatic Request Validation** - complete implementation:
+  - `IValidatableRequest` interface for validation returning `Result`
+  - `IValidatableRequestBool` interface for simple boolean validation
+  - `[ValidateRequest]` attribute to enable validation on methods/interfaces
+  - `[ValidationMethod]` attribute to mark existing validation methods
+  - Server-side validation in `RequestDispatcher` before method invocation
+  - Client-side validation in `HttpMethodInterceptor` with `[ValidateRequest(ClientSide = true)]`
+  - Client validation prevents HTTP call for invalid requests (optimization)
+  - Server always validates regardless of `ClientSide` setting (security)
+
+## [1.6.0] - 2026-02-03
+
 ### Changed
 
 - **Breaking:** HTTP 429 now returns `ErrorType.TooManyRequests` instead of `ErrorType.Unavailable` (ADR-009)
