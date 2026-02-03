@@ -100,8 +100,9 @@ public class UserController
 | 404 Not Found | `Result.Failure(Error.NotFound(...))` |
 | 409 Conflict | `Result.Failure(Error.Conflict(...))` |
 | 408, 504 Timeout | `Result.Failure(Error.Timeout(...))` |
-| 429, 503 | `Result.Failure(Error.Unavailable(...))` |
-| 5xx | `Result.Failure(Error.Unexpected(...))` |
+| 429, 502, 503 | `Result.Failure(Error.Unavailable(...))` |
+| 500 | `Result.Failure(Error.Unexpected(...))` |
+| Other 5xx | `Result.Failure(Error.Unexpected(...))` |
 
 ### Connection Errors
 
@@ -366,6 +367,255 @@ static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
 }
 ```
 
+## Result-Level Resilience
+
+In addition to HTTP-level policies (Polly), you can apply retry logic at the Result level using `ResultResilienceExtensions`.
+
+### Retry with Default Transient Error Policy
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+
+// Retry transient errors (Unavailable, Timeout) with exponential backoff
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id));
+
+// Default: 3 attempts, 1s/2s/4s delays
+```
+
+### Custom Retry Policy
+
+```csharp
+// Custom max attempts and base delay
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 5, baseDelayMs: 500));
+
+// Custom retry conditions
+var policy = ResultResilienceExtensions.CustomRetryPolicy(
+    maxAttempts: 5,
+    shouldRetry: error => error.Type == ErrorType.Unavailable || error.Code == "RATE_LIMIT",
+    delayStrategy: attempt => 500 * attempt);  // Linear backoff
+
+var result = await ResultResilienceExtensions.RetryAsync(() => _userService.GetUserAsync(id), policy);
+```
+
+### Error Classification
+
+According to ADR-007, errors are classified as:
+
+| Classification | ErrorType | Retryable | Circuit Breaker |
+|----------------|-----------|-----------|-----------------|
+| **Transient** | Unavailable, Timeout | Yes | Counts |
+| **Infrastructure** | Database, Unexpected | No | Counts |
+| **Business** | Validation, NotFound, Permission, Unauthorized, Conflict, Business, Cancelled | No | Ignores |
+
+Helper methods for classification:
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+
+// Check if error is transient (retryable)
+if (error.IsTransient())
+{
+    // Retry logic
+}
+
+// Check if error should count towards circuit breaker
+if (error.IsInfrastructureFailure())
+{
+    // Log infrastructure issue
+}
+```
+
+### HTTP Status Code Mapping
+
+| HTTP Status | ErrorType | Classification |
+|-------------|-----------|----------------|
+| 408 Request Timeout | Timeout | Transient |
+| 429 Too Many Requests | Unavailable | Transient |
+| 502 Bad Gateway | Unavailable | Transient |
+| 503 Service Unavailable | Unavailable | Transient |
+| 504 Gateway Timeout | Timeout | Transient |
+| 500 Internal Server Error | Unexpected | Infrastructure |
+| 400 Bad Request | Validation | Business |
+| 401 Unauthorized | Unauthorized | Business |
+| 403 Forbidden | Permission | Business |
+| 404 Not Found | NotFound | Business |
+| 409 Conflict | Conflict | Business |
+
+### Combining with Polly
+
+For comprehensive resilience, combine HTTP-level (Polly) and Result-level policies:
+
+```csharp
+// HTTP-level: Handle transport errors (connection refused, DNS failures)
+services.AddServiceProxy<IUserService>("https://api.example.com")
+    .AddPolicyHandler(HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(3, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt))));
+
+// Result-level: Handle semantic errors after HTTP succeeds
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 3, baseDelayMs: 1000));
+```
+
+### Built-in Resilience (Retry + Circuit Breaker)
+
+The simplest way to add resilience is to configure it at registration time. Both retry and circuit breaker are applied automatically to all proxy calls.
+
+The circuit breaker uses [Voyager.Common.Resilience](https://www.nuget.org/packages/Voyager.Common.Resilience/) internally and automatically:
+- **Counts** infrastructure errors: `Unavailable`, `Timeout`, `Database`, `Unexpected`
+- **Ignores** business errors: `Validation`, `NotFound`, `Permission`, etc.
+
+#### ASP.NET Core
+
+```csharp
+// Program.cs - configure resilience at registration
+builder.Services.AddServiceProxy<IPaymentService>(options =>
+{
+    options.BaseUrl = new Uri("https://payments.internal.com");
+
+    // Enable retry with exponential backoff
+    options.Resilience.Retry.Enabled = true;
+    options.Resilience.Retry.MaxAttempts = 3;
+    options.Resilience.Retry.BaseDelayMs = 1000;  // 1s, 2s, 4s
+
+    // Enable circuit breaker
+    options.Resilience.CircuitBreaker.Enabled = true;
+    options.Resilience.CircuitBreaker.FailureThreshold = 5;
+    options.Resilience.CircuitBreaker.OpenTimeout = TimeSpan.FromSeconds(30);
+});
+
+// Usage - resilience is automatic!
+public class OrderService
+{
+    private readonly IPaymentService _paymentService;
+
+    public OrderService(IPaymentService paymentService)
+    {
+        _paymentService = paymentService;
+    }
+
+    public async Task<Result<Order>> ProcessOrderAsync(OrderRequest request)
+    {
+        // Retry and circuit breaker are applied automatically
+        var paymentResult = await _paymentService.ChargeAsync(request.PaymentDetails);
+
+        return paymentResult.Bind(payment => CreateOrder(request, payment));
+    }
+}
+```
+
+#### OWIN / .NET Framework 4.8
+
+```csharp
+// Startup.cs - same configuration API
+public class Startup
+{
+    public void Configuration(IAppBuilder app)
+    {
+        var services = new ServiceCollection();
+
+        services.AddServiceProxy<IPaymentService>(options =>
+        {
+            options.BaseUrl = new Uri("https://payments.internal.com");
+
+            options.Resilience.Retry.Enabled = true;
+            options.Resilience.Retry.MaxAttempts = 3;
+
+            options.Resilience.CircuitBreaker.Enabled = true;
+            options.Resilience.CircuitBreaker.FailureThreshold = 5;
+        });
+
+        // Build ServiceProvider and configure OWIN...
+    }
+}
+
+// Usage - same as ASP.NET Core
+public class OrderService
+{
+    private readonly IPaymentService _paymentService;
+
+    public async Task<Result<Order>> ProcessOrderAsync(OrderRequest request)
+    {
+        // Resilience is automatic
+        return await _paymentService.ChargeAsync(request.PaymentDetails)
+            .BindAsync(payment => CreateOrder(request, payment));
+    }
+}
+```
+
+#### Handling Circuit Breaker Open State
+
+```csharp
+var result = await _paymentService.ChargeAsync(request.PaymentDetails);
+
+result.Switch(
+    onSuccess: payment => ProcessPayment(payment),
+    onFailure: error =>
+    {
+        if (error.Type == ErrorType.CircuitBreakerOpen)
+        {
+            _logger.LogWarning("Payment service circuit breaker open: {Message}", error.Message);
+            return UseFallbackPaymentMethod();
+        }
+        return HandleError(error);
+    });
+```
+
+### Manual Resilience (Advanced)
+
+For more control, you can use `Voyager.Common.Resilience` extensions directly:
+
+```csharp
+using Voyager.Common.Resilience;
+
+// Register proxy without built-in resilience
+builder.Services.AddServiceProxy<IUserService>("https://api.example.com");
+
+// Register shared circuit breaker
+builder.Services.AddSingleton(new CircuitBreakerPolicy(
+    failureThreshold: 5,
+    openTimeout: TimeSpan.FromSeconds(30)));
+
+// Apply manually in code
+public async Task<Result<User>> GetUserAsync(int id)
+{
+    return await _userService.GetUserAsync(id)
+        .BindWithCircuitBreakerAsync(user => EnrichUserAsync(user), _circuitBreaker);
+}
+```
+
+#### Complete Manual Resilience Pattern
+
+```csharp
+using Voyager.Common.Proxy.Client.Extensions;
+using Voyager.Common.Resilience;
+
+// Retry transient errors, then apply circuit breaker
+var result = await ResultResilienceExtensions.RetryAsync(
+    () => _userService.GetUserAsync(id),
+    ResultResilienceExtensions.TransientErrorPolicy(maxAttempts: 3, baseDelayMs: 500))
+    .BindWithCircuitBreakerAsync(
+        user => _externalService.EnrichUserDataAsync(user),
+        _circuitBreaker);
+
+// Handle circuit breaker open state
+result.Switch(
+    onSuccess: data => ProcessData(data),
+    onFailure: error =>
+    {
+        if (error.Type == ErrorType.CircuitBreakerOpen)
+        {
+            _logger.LogWarning("Circuit breaker open: {Message}", error.Message);
+            return GetCachedData(); // Fallback
+        }
+        _logger.LogError("Operation failed: {Error}", error);
+    });
+```
+
 ## JSON Serialization
 
 By default, the proxy uses `System.Text.Json` with camelCase naming. You can customize this:
@@ -414,19 +664,107 @@ public interface IOrderService
 **Required:**
 - `Voyager.Common.Proxy.Abstractions` - HTTP attributes
 - `Voyager.Common.Results` - Result pattern
+- `Voyager.Common.Resilience` - Circuit breaker pattern (used internally)
 - `Microsoft.Extensions.Http` - HttpClientFactory
 
 **net48 only:**
 - `Castle.Core` - Dynamic proxy generation
 
 **Optional:**
-- `Microsoft.Extensions.Http.Polly` - Retry policies, circuit breakers
+- `Microsoft.Extensions.Http.Polly` - HTTP-level retry policies
+
+## Diagnostics and Observability
+
+The proxy supports diagnostics events for logging, metrics, and observability. Events are emitted for all proxy operations including requests, retries, and circuit breaker state changes.
+
+### Basic Setup with Logging
+
+```csharp
+// Install: dotnet add package Voyager.Common.Proxy.Diagnostics
+
+using Voyager.Common.Proxy.Diagnostics;
+
+// Register logging diagnostics
+services.AddLogging(builder => builder.AddConsole());
+services.AddProxyLoggingDiagnostics();
+
+// Register your service proxy
+services.AddServiceProxy<IUserService>("https://api.example.com");
+```
+
+### Adding User Context
+
+To include user information (login, unit ID, unit type) in all diagnostic events:
+
+```csharp
+// Implement IProxyRequestContext
+public class HttpContextRequestContext : IProxyRequestContext
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpContextRequestContext(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public string? UserLogin => _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+    public string? UnitId => _httpContextAccessor.HttpContext?.User?.FindFirst("unit_id")?.Value;
+    public string? UnitType => "Agent"; // or from claims/config
+    public IReadOnlyDictionary<string, string>? CustomProperties => null;
+}
+
+// Register
+services.AddHttpContextAccessor();
+services.AddProxyRequestContext<HttpContextRequestContext>();
+```
+
+### Custom Diagnostics Handler
+
+Create custom handlers for metrics, APM, or alerting:
+
+```csharp
+public class MetricsDiagnostics : ProxyDiagnosticsHandler
+{
+    private readonly IMetricsService _metrics;
+
+    public MetricsDiagnostics(IMetricsService metrics) => _metrics = metrics;
+
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        _metrics.RecordHistogram("proxy_duration_ms", e.Duration.TotalMilliseconds,
+            new[] { ("service", e.ServiceName), ("method", e.MethodName) });
+    }
+
+    public override void OnCircuitBreakerStateChanged(CircuitBreakerStateChangedEvent e)
+    {
+        if (e.NewState == "Open")
+            _metrics.IncrementCounter("circuit_breaker_opened",
+                new[] { ("service", e.ServiceName) });
+    }
+}
+
+// Register multiple handlers
+services.AddProxyDiagnostics<LoggingProxyDiagnostics>();
+services.AddProxyDiagnostics<MetricsDiagnostics>();
+```
+
+### Available Events
+
+| Event | When Emitted |
+|-------|--------------|
+| `OnRequestStarting` | Before HTTP request is sent |
+| `OnRequestCompleted` | After response received (success or business error) |
+| `OnRequestFailed` | When exception occurs |
+| `OnRetryAttempt` | Before each retry attempt |
+| `OnCircuitBreakerStateChanged` | When circuit breaker state changes |
 
 ## Related Packages
 
 - **Voyager.Common.Proxy.Abstractions** - HTTP attributes (optional)
+- **Voyager.Common.Proxy.Diagnostics** - Logging diagnostics handler
 - **Voyager.Common.Proxy.Server** - Server-side endpoint generation
 - **Voyager.Common.Results** - Result pattern library
+- **Voyager.Common.Resilience** - Circuit breaker for Result types (included)
 
 ## License
 

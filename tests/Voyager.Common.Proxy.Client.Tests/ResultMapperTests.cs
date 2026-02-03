@@ -171,9 +171,22 @@ public class ResultMapperTests
     }
 
     [Fact]
-    public async Task MapResponseAsync_429TooManyRequests_ReturnsUnavailableError()
+    public async Task MapResponseAsync_429TooManyRequests_ReturnsTooManyRequestsError()
     {
         var response = CreateErrorResponse((HttpStatusCode)429, "Rate limited");
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<User>), JsonOptions);
+
+        result.Should().BeOfType<Result<User>>();
+        var typedResult = (Result<User>)result;
+        typedResult.IsFailure.Should().BeTrue();
+        typedResult.Error!.Type.Should().Be(ErrorType.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task MapResponseAsync_502BadGateway_ReturnsUnavailableError()
+    {
+        var response = CreateErrorResponse(HttpStatusCode.BadGateway, "Bad gateway");
 
         var result = await ResultMapper.MapResponseAsync(response, typeof(Result<User>), JsonOptions);
 

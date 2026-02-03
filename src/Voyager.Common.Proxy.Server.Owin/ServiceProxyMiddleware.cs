@@ -6,6 +6,7 @@ using System.IO;
 using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
+using Voyager.Common.Proxy.Diagnostics;
 using Voyager.Common.Proxy.Server.Abstractions;
 using Voyager.Common.Proxy.Server.Core;
 
@@ -35,6 +36,10 @@ internal sealed class ServiceProxyMiddleware<TService>
     // Permission checking - optional
     private readonly Func<PermissionContext, Task<PermissionResult>>? _permissionChecker;
 
+    // Diagnostics - optional
+    private readonly IEnumerable<IProxyDiagnostics>? _diagnosticsHandlers;
+    private readonly Func<IDictionary<string, object>, IProxyRequestContext?>? _requestContextFactory;
+
     /// <summary>
     /// Creates a new instance of the service proxy middleware with a simple factory.
     /// </summary>
@@ -45,7 +50,7 @@ internal sealed class ServiceProxyMiddleware<TService>
         AppFunc next,
         EndpointMatcher matcher,
         Func<TService> serviceFactory)
-        : this(next, matcher, serviceFactory, null, null)
+        : this(next, matcher, serviceFactory, null, null, null, null)
     {
     }
 
@@ -59,7 +64,7 @@ internal sealed class ServiceProxyMiddleware<TService>
         AppFunc next,
         EndpointMatcher matcher,
         Func<IDictionary<string, object>, TService> contextAwareFactory)
-        : this(next, matcher, null, contextAwareFactory, null)
+        : this(next, matcher, null, contextAwareFactory, null, null, null)
     {
     }
 
@@ -78,7 +83,9 @@ internal sealed class ServiceProxyMiddleware<TService>
             matcher,
             options.ServiceFactory,
             options.ContextAwareFactory,
-            options.GetEffectivePermissionChecker())
+            options.GetEffectivePermissionChecker(),
+            options.DiagnosticsHandlers,
+            options.RequestContextFactory)
     {
     }
 
@@ -87,13 +94,17 @@ internal sealed class ServiceProxyMiddleware<TService>
         EndpointMatcher matcher,
         Func<TService>? serviceFactory,
         Func<IDictionary<string, object>, TService>? contextAwareFactory,
-        Func<PermissionContext, Task<PermissionResult>>? permissionChecker)
+        Func<PermissionContext, Task<PermissionResult>>? permissionChecker,
+        IEnumerable<IProxyDiagnostics>? diagnosticsHandlers,
+        Func<IDictionary<string, object>, IProxyRequestContext?>? requestContextFactory)
     {
         _next = next ?? throw new ArgumentNullException(nameof(next));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
         _serviceFactory = serviceFactory;
         _contextAwareFactory = contextAwareFactory;
         _permissionChecker = permissionChecker;
+        _diagnosticsHandlers = diagnosticsHandlers;
+        _requestContextFactory = requestContextFactory;
         _dispatcher = new RequestDispatcher();
         _parameterBinder = new ParameterBinder();
         _authorizationCache = new Dictionary<EndpointDescriptor, AuthorizationInfo>();
@@ -164,8 +175,9 @@ internal sealed class ServiceProxyMiddleware<TService>
         var service = CreateService(environment);
         var reqContext = new OwinRequestContext(environment, routeValues);
         var responseWriter = new OwinResponseWriter(environment);
+        var proxyRequestContext = _requestContextFactory?.Invoke(environment);
 
-        await _dispatcher.DispatchAsync(reqContext, responseWriter, endpoint, service)
+        await _dispatcher.DispatchAsync(reqContext, responseWriter, endpoint, service, _diagnosticsHandlers, proxyRequestContext)
             .ConfigureAwait(false);
     }
 

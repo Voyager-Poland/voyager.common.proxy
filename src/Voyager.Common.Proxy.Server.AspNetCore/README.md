@@ -408,6 +408,93 @@ app.MapServiceProxy<IVIPService>(options =>
 | `PermissionResult.Denied(reason)` | 403 Forbidden | User authenticated but not allowed |
 | `PermissionResult.Unauthenticated()` | 401 Unauthorized | User not authenticated |
 
+## Diagnostics and Observability
+
+The server automatically emits diagnostic events for all incoming requests. Events include request timing, success/failure status, and user context.
+
+### Basic Setup
+
+Diagnostics handlers are automatically resolved from DI:
+
+```csharp
+// Install: dotnet add package Voyager.Common.Proxy.Diagnostics
+
+using Voyager.Common.Proxy.Diagnostics;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Register logging
+builder.Services.AddLogging(b => b.AddConsole());
+
+// Register diagnostics handler
+builder.Services.AddProxyLoggingDiagnostics();
+
+// Register your service
+builder.Services.AddScoped<IUserService, UserService>();
+
+var app = builder.Build();
+
+// Map service - diagnostics are automatically active
+app.MapServiceProxy<IUserService>();
+
+app.Run();
+```
+
+### Adding User Context
+
+To include user information in diagnostic events:
+
+```csharp
+public class HttpContextRequestContext : IProxyRequestContext
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpContextRequestContext(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public string? UserLogin => _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+    public string? UnitId => _httpContextAccessor.HttpContext?.User?.FindFirst("unit_id")?.Value;
+    public string? UnitType => "Agent";
+    public IReadOnlyDictionary<string, string>? CustomProperties => null;
+}
+
+// Register
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddProxyRequestContext<HttpContextRequestContext>();
+```
+
+### Custom Diagnostics Handler
+
+```csharp
+public class ServerMetricsDiagnostics : ProxyDiagnosticsHandler
+{
+    private readonly IMetricsService _metrics;
+
+    public ServerMetricsDiagnostics(IMetricsService metrics) => _metrics = metrics;
+
+    public override void OnRequestCompleted(RequestCompletedEvent e)
+    {
+        _metrics.RecordHistogram("server_request_duration_ms", e.Duration.TotalMilliseconds,
+            new[] { ("service", e.ServiceName), ("method", e.MethodName), ("success", e.IsSuccess.ToString()) });
+    }
+}
+
+// Register
+builder.Services.AddProxyDiagnostics<ServerMetricsDiagnostics>();
+```
+
+### Server-Side Events
+
+| Event | When Emitted |
+|-------|--------------|
+| `OnRequestStarting` | When request is received |
+| `OnRequestCompleted` | After response is sent (success or business error) |
+| `OnRequestFailed` | When exception occurs during processing |
+
+> **Note:** Server-side does not emit `OnRetryAttempt` or `OnCircuitBreakerStateChanged` - these are client-side patterns.
+
 ## Target Frameworks
 
 - `net6.0`

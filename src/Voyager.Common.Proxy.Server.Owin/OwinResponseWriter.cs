@@ -6,6 +6,8 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Voyager.Common.Proxy.Server.Abstractions;
+using Voyager.Common.Results;
+using Voyager.Common.Results.Extensions;
 
 /// <summary>
 /// Adapts the OWIN environment dictionary to IResponseWriter.
@@ -90,19 +92,24 @@ internal sealed class OwinResponseWriter : IResponseWriter
         throw new InvalidOperationException("OWIN response body stream not found in environment.");
     }
 
+    /// <summary>
+    /// Maps ErrorType string to HTTP status code using centralized classification.
+    /// </summary>
     private static int MapErrorTypeToStatusCode(string errorType)
     {
+        // Use centralized mapping from Voyager.Common.Results.Extensions
+        if (Enum.TryParse<ErrorType>(errorType, ignoreCase: true, out var type))
+        {
+            return type.ToHttpStatusCode();
+        }
+
+        // Legacy string mappings for backward compatibility
         return errorType switch
         {
-            "Validation" => 400,
-            "NotFound" => 404,
-            "Unauthorized" => 401,
             "Forbidden" => 403,
-            "Conflict" => 409,
-            "TooManyRequests" => 429,
             "Internal" => 500,
-            "NotImplemented" => 501,
             "ServiceUnavailable" => 503,
+            "NotImplemented" => 501,
             _ => 500
         };
     }

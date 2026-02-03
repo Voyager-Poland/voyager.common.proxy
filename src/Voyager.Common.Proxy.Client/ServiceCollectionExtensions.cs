@@ -1,8 +1,12 @@
 namespace Voyager.Common.Proxy.Client
 {
     using System;
+    using System.Collections.Generic;
+    using System.Linq;
     using System.Net.Http;
     using Microsoft.Extensions.DependencyInjection;
+    using Voyager.Common.Proxy.Diagnostics;
+    using Voyager.Common.Resilience;
 
     /// <summary>
     /// Extension methods for registering service proxies with dependency injection.
@@ -170,13 +174,35 @@ namespace Voyager.Common.Proxy.Client
                 client.Timeout = options.Timeout;
             });
 
+            // Create shared circuit breaker if enabled (one per service type)
+            CircuitBreakerPolicy? circuitBreaker = null;
+            if (options.Resilience.CircuitBreaker.Enabled)
+            {
+                var cbOptions = options.Resilience.CircuitBreaker;
+                circuitBreaker = new CircuitBreakerPolicy(
+                    failureThreshold: cbOptions.FailureThreshold,
+                    openTimeout: cbOptions.OpenTimeout,
+                    halfOpenMaxAttempts: cbOptions.HalfOpenSuccessThreshold);
+            }
+
             // Register the service proxy
             services.AddTransient<TService>(sp =>
             {
                 var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var httpClient = httpClientFactory.CreateClient(clientName);
 
-                return ServiceProxy<TService>.Create(httpClient, options);
+                // Resolve diagnostics handlers (optional)
+                var diagnosticsHandlers = sp.GetServices<IProxyDiagnostics>();
+
+                // Resolve request context (optional)
+                var requestContext = sp.GetService<IProxyRequestContext>();
+
+                return ServiceProxy<TService>.Create(
+                    httpClient,
+                    options,
+                    circuitBreaker,
+                    diagnosticsHandlers,
+                    requestContext);
             });
 
             return httpClientBuilder;
