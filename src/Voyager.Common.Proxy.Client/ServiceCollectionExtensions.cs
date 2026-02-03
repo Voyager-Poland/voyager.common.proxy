@@ -191,6 +191,14 @@ namespace Voyager.Common.Proxy.Client
                 var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
                 var httpClient = httpClientFactory.CreateClient(clientName);
 
+                // Defensive fallback: ensure BaseAddress is set
+                // This handles cases where IHttpClientFactory integration doesn't work properly
+                // (e.g., some Unity/DI container bridging scenarios)
+                if (httpClient.BaseAddress == null && options.BaseUrl != null)
+                {
+                    httpClient.BaseAddress = options.BaseUrl;
+                }
+
                 // Resolve diagnostics handlers (optional)
                 var diagnosticsHandlers = sp.GetServices<IProxyDiagnostics>();
 
