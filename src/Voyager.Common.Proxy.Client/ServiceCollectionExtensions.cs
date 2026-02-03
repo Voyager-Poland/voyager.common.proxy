@@ -185,18 +185,32 @@ namespace Voyager.Common.Proxy.Client
                     halfOpenMaxAttempts: cbOptions.HalfOpenSuccessThreshold);
             }
 
+            // Capture handler factories for use in the proxy registration
+            var handlerFactories = options.DelegatingHandlerFactories.ToList();
+
             // Register the service proxy
             services.AddTransient<TService>(sp =>
             {
-                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-                var httpClient = httpClientFactory.CreateClient(clientName);
+                HttpClient httpClient;
 
-                // Defensive fallback: ensure BaseAddress is set
-                // This handles cases where IHttpClientFactory integration doesn't work properly
-                // (e.g., some Unity/DI container bridging scenarios)
-                if (httpClient.BaseAddress == null && options.BaseUrl != null)
+                // If we have custom handler factories, build the pipeline manually
+                // This is more reliable than IHttpClientFactory.AddHttpMessageHandler
+                // which may not work correctly with some DI container bridges (e.g., Unity)
+                if (handlerFactories.Count > 0)
                 {
-                    httpClient.BaseAddress = options.BaseUrl;
+                    httpClient = CreateHttpClientWithHandlers(sp, options, handlerFactories);
+                }
+                else
+                {
+                    // Use IHttpClientFactory when no custom handlers are needed
+                    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                    httpClient = httpClientFactory.CreateClient(clientName);
+
+                    // Defensive fallback: ensure BaseAddress is set
+                    if (httpClient.BaseAddress == null && options.BaseUrl != null)
+                    {
+                        httpClient.BaseAddress = options.BaseUrl;
+                    }
                 }
 
                 // Resolve diagnostics handlers (optional)
@@ -214,6 +228,39 @@ namespace Voyager.Common.Proxy.Client
             });
 
             return httpClientBuilder;
+        }
+
+        /// <summary>
+        /// Creates an HttpClient with a manually constructed handler pipeline.
+        /// This is used when custom DelegatingHandler factories are provided,
+        /// which is more reliable than IHttpClientFactory.AddHttpMessageHandler
+        /// in some DI container bridge scenarios (e.g., Unity).
+        /// </summary>
+        private static HttpClient CreateHttpClientWithHandlers(
+            IServiceProvider serviceProvider,
+            ServiceProxyOptions options,
+            List<Func<IServiceProvider, DelegatingHandler>> handlerFactories)
+        {
+            // Start with the primary handler (the one that actually sends HTTP requests)
+            HttpMessageHandler pipeline = new HttpClientHandler();
+
+            // Build the handler pipeline from inside out
+            // The last handler in the list wraps the HttpClientHandler directly
+            // The first handler in the list is the outermost (first to receive the request)
+            for (int i = handlerFactories.Count - 1; i >= 0; i--)
+            {
+                var handler = handlerFactories[i](serviceProvider);
+                handler.InnerHandler = pipeline;
+                pipeline = handler;
+            }
+
+            var httpClient = new HttpClient(pipeline)
+            {
+                BaseAddress = options.BaseUrl,
+                Timeout = options.Timeout
+            };
+
+            return httpClient;
         }
 
         /// <summary>

@@ -1,6 +1,8 @@
 namespace Voyager.Common.Proxy.Client
 {
     using System;
+    using System.Collections.Generic;
+    using System.Net.Http;
     using System.Text.Json;
 
     /// <summary>
@@ -56,6 +58,26 @@ namespace Voyager.Common.Proxy.Client
         /// </code>
         /// </example>
         public ResilienceOptions Resilience { get; } = new ResilienceOptions();
+
+        /// <summary>
+        /// Gets or sets the delegating handler factories for the HTTP client pipeline.
+        /// </summary>
+        /// <remarks>
+        /// These factories are used to create delegating handlers (e.g., authorization handlers)
+        /// that are added to the HttpClient pipeline. This is an alternative to using
+        /// <see cref="Microsoft.Extensions.DependencyInjection.HttpClientBuilderExtensions.AddHttpMessageHandler{THandler}"/>
+        /// which may not work correctly with some DI container bridges (e.g., Unity).
+        ///
+        /// Handlers are executed in the order they are added (first added = outermost handler).
+        /// </remarks>
+        /// <example>
+        /// <code>
+        /// options.DelegatingHandlerFactories.Add(sp =>
+        ///     sp.GetRequiredService&lt;AuthorizationHandler&gt;());
+        /// </code>
+        /// </example>
+        public List<Func<IServiceProvider, DelegatingHandler>> DelegatingHandlerFactories { get; }
+            = new List<Func<IServiceProvider, DelegatingHandler>>();
 
         /// <summary>
         /// Gets the default JSON serializer options.
