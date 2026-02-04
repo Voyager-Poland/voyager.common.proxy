@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-02-04
+
+### Added
+
+- **Parameterized constructor support in ParameterBinder** (Server.Core):
+  - Complex types with parameterized constructors (e.g., C# records) are now supported for route/query binding
+  - Constructor parameters are filled from route values and query parameters (case-insensitive)
+  - Supports default parameter values and nullable types
+  - Falls back to parameterless constructor if available
+
 ## [1.7.3] - 2026-02-03
 
 ### Added

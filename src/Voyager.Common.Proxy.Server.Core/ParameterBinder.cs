@@ -104,14 +104,14 @@ public class ParameterBinder
 
     private static object? BindFromRouteAndQuery(IRequestContext context, ParameterDescriptor param)
     {
-        // Create instance of the complex type
-        var instance = Activator.CreateInstance(param.Type);
+        // Try to create instance - first with parameterless constructor, then with parameterized
+        var instance = CreateInstance(param.Type, context);
         if (instance == null)
         {
             return param.IsOptional ? param.DefaultValue : null;
         }
 
-        // Get all settable properties
+        // Get all settable properties and fill them from route/query
         var properties = param.Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanWrite);
 
@@ -144,6 +144,89 @@ public class ParameterBinder
         }
 
         return instance;
+    }
+
+    private static object? CreateInstance(Type type, IRequestContext context)
+    {
+        // Try parameterless constructor first
+        var parameterlessCtor = type.GetConstructor(Type.EmptyTypes);
+        if (parameterlessCtor != null)
+        {
+            return Activator.CreateInstance(type);
+        }
+
+        // Find a public constructor with parameters
+        var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+        if (constructors.Length == 0)
+        {
+            return null;
+        }
+
+        // Prefer constructor with most parameters that we can satisfy
+        foreach (var ctor in constructors.OrderByDescending(c => c.GetParameters().Length))
+        {
+            var ctorParams = ctor.GetParameters();
+            var args = new object?[ctorParams.Length];
+            var canUse = true;
+
+            for (int i = 0; i < ctorParams.Length; i++)
+            {
+                var ctorParam = ctorParams[i];
+                string? stringValue = null;
+
+                // Try to get value from route (case-insensitive)
+                if (context.RouteValues.TryGetValue(ctorParam.Name!, out var routeValue))
+                {
+                    stringValue = routeValue;
+                }
+                // Try to get value from query (case-insensitive)
+                else if (context.QueryParameters.TryGetValue(ctorParam.Name!, out var queryValue))
+                {
+                    stringValue = queryValue;
+                }
+
+                if (stringValue != null)
+                {
+                    try
+                    {
+                        args[i] = ConvertValue(stringValue, ctorParam.ParameterType);
+                    }
+                    catch
+                    {
+                        canUse = false;
+                        break;
+                    }
+                }
+                else if (ctorParam.HasDefaultValue)
+                {
+                    args[i] = ctorParam.DefaultValue;
+                }
+                else if (IsNullableType(ctorParam.ParameterType))
+                {
+                    args[i] = null;
+                }
+                else
+                {
+                    // Required parameter not found
+                    canUse = false;
+                    break;
+                }
+            }
+
+            if (canUse)
+            {
+                try
+                {
+                    return ctor.Invoke(args);
+                }
+                catch
+                {
+                    // Try next constructor
+                }
+            }
+        }
+
+        return null;
     }
 
     private static async Task<object?> BindFromBodyAsync(IRequestContext context, ParameterDescriptor param)
