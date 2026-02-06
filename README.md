@@ -250,6 +250,24 @@ public interface IUserService
 }
 ```
 
+### No Route Prefix
+
+For external APIs that don't use a common route prefix, use `ServiceRouteAttribute.NoPrefix`:
+
+```csharp
+[ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+public interface IExternalPaymentApi
+{
+    [HttpPost("NewOrder")]
+    Task<Result<Order>> NewOrder(Order order, CancellationToken cancellationToken);
+    // POST /NewOrder
+
+    [HttpPost("GetOrder")]
+    Task<Result<Order>> GetOrder(uint orderId, CancellationToken cancellationToken);
+    // POST /GetOrder
+}
+```
+
 ## Authorization
 
 Add authorization to server endpoints using attributes or configuration:
@@ -298,6 +316,7 @@ dotnet add package Voyager.Common.Proxy.Abstractions
 Zero-dependency package providing optional attributes:
 
 - `[ServiceRoute("prefix")]` - Set base route for interface
+- `[ServiceRoute(ServiceRouteAttribute.NoPrefix)]` - No route prefix (for external APIs)
 - `[HttpMethod(method, "template")]` - Override HTTP method and route
 - `[RequireAuthorization]` - Require authentication
 - `[RequireAuthorization("Policy")]` - Require specific policy

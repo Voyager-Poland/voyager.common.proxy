@@ -138,6 +138,22 @@ public class RouteBuilderTests
         result.Should().Be("user-management-service");
     }
 
+    [Fact]
+    public void GetServicePrefix_WithNoPrefixRoute_ReturnsEmptyString()
+    {
+        var result = RouteBuilder.GetServicePrefix(typeof(INoPrefixService));
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetServicePrefix_WithEmptyStringRoute_ReturnsEmptyString()
+    {
+        var result = RouteBuilder.GetServicePrefix(typeof(IEmptyStringRouteService));
+
+        result.Should().BeEmpty();
+    }
+
     #endregion
 
     #region BuildRequest Tests
@@ -343,6 +359,31 @@ public class RouteBuilderTests
         body.Should().BeSameAs(request);
     }
 
+    [Fact]
+    public void BuildRequest_WithEmptyPrefix_AndTemplate_BuildsPathWithoutPrefix()
+    {
+        var method = typeof(INoPrefixService).GetMethod(nameof(INoPrefixService.NewOrder))!;
+        var order = new Order { Id = 1 };
+        var args = new object?[] { order, CancellationToken.None };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "");
+
+        url.Should().Be("/NewOrder");
+        body.Should().BeSameAs(order);
+    }
+
+    [Fact]
+    public void BuildRequest_WithEmptyPrefix_AndConvention_BuildsPathWithoutPrefix()
+    {
+        var method = typeof(INoPrefixService).GetMethod(nameof(INoPrefixService.GetStatusAsync))!;
+        var args = new object?[] { 42 };
+
+        var (url, body) = RouteBuilder.BuildRequest(method, args, "");
+
+        url.Should().Be("/get-status?id=42");
+        body.Should().BeNull();
+    }
+
     #endregion
 
     #region Helper Methods
@@ -481,6 +522,27 @@ public class RouteBuilderTests
     public class NestedType
     {
         public string? Value { get; set; }
+    }
+
+    [ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+    public interface INoPrefixService
+    {
+        [HttpPost("NewOrder")]
+        Task<Result<Order>> NewOrder(Order order, CancellationToken cancellationToken);
+
+        Task<Result<object>> GetStatusAsync(int id);
+    }
+
+    [ServiceRoute("")]
+    public interface IEmptyStringRouteService
+    {
+        [HttpPost("ProcessPayment")]
+        Task<Result<object>> ProcessPayment();
+    }
+
+    public class Order
+    {
+        public int Id { get; set; }
     }
 
     #endregion

@@ -28,6 +28,15 @@ namespace Voyager.Common.Proxy.Abstractions
     ///     // Results in: POST /api/v2/users/create-user
     /// }
     ///
+    /// // No route prefix (external API without common prefix)
+    /// [ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+    /// public interface IExternalApiService
+    /// {
+    ///     [HttpPost("NewOrder")]
+    ///     Task&lt;Result&lt;Order&gt;&gt; NewOrder(Order order);
+    ///     // Results in: POST /NewOrder
+    /// }
+    ///
     /// // Convention-based (no attribute)
     /// public interface IOrderService
     /// {
@@ -40,12 +49,30 @@ namespace Voyager.Common.Proxy.Abstractions
     public sealed class ServiceRouteAttribute : Attribute
     {
         /// <summary>
+        /// Use this constant to explicitly indicate that the service has no route prefix.
+        /// Methods will be mapped directly under the root path.
+        /// </summary>
+        /// <example>
+        /// <code>
+        /// [ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+        /// public interface IExternalApiService
+        /// {
+        ///     [HttpPost("NewOrder")]
+        ///     Task&lt;Result&lt;Order&gt;&gt; NewOrder(Order order);
+        ///     // Results in: POST /NewOrder
+        /// }
+        /// </code>
+        /// </example>
+        public const string NoPrefix = "";
+
+        /// <summary>
         /// Gets the base route prefix for the service.
         /// </summary>
         /// <remarks>
         /// <para>
         /// The prefix should not start or end with a slash.
         /// Leading and trailing slashes are automatically handled by the proxy.
+        /// An empty string means no prefix — methods are mapped directly under the root path.
         /// </para>
         /// </remarks>
         public string Prefix { get; }
@@ -56,12 +83,13 @@ namespace Voyager.Common.Proxy.Abstractions
         /// <param name="prefix">
         /// The base route prefix for all methods in the service.
         /// Should not start or end with a slash.
+        /// Use <see cref="NoPrefix"/> or empty string for services without a route prefix.
         /// </param>
         /// <exception cref="ArgumentNullException">
         /// Thrown when <paramref name="prefix"/> is null.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="prefix"/> is empty or whitespace.
+        /// Thrown when <paramref name="prefix"/> contains only whitespace characters.
         /// </exception>
         public ServiceRouteAttribute(string prefix)
         {
@@ -70,9 +98,11 @@ namespace Voyager.Common.Proxy.Abstractions
                 throw new ArgumentNullException(nameof(prefix));
             }
 
-            if (string.IsNullOrWhiteSpace(prefix))
+            if (prefix.Length > 0 && string.IsNullOrWhiteSpace(prefix))
             {
-                throw new ArgumentException("Route prefix cannot be empty or whitespace.", nameof(prefix));
+                throw new ArgumentException(
+                    "Route prefix cannot contain only whitespace. Use ServiceRouteAttribute.NoPrefix for no prefix.",
+                    nameof(prefix));
             }
 
             Prefix = prefix.Trim('/');
