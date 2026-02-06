@@ -52,6 +52,22 @@ public interface IUserService
 }
 ```
 
+For external APIs without a common route prefix, use `ServiceRouteAttribute.NoPrefix`:
+
+```csharp
+[ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+public interface IExternalPaymentApi
+{
+    [HttpPost("NewOrder")]
+    Task<Result<Order>> NewOrder(Order order, CancellationToken cancellationToken);
+    // Results in: POST /NewOrder
+
+    [HttpPost("GetOrder")]
+    Task<Result<Order>> GetOrder(uint orderId, CancellationToken cancellationToken);
+    // Results in: POST /GetOrder
+}
+```
+
 ### HTTP Method Attributes
 
 Override the HTTP method and/or route template for specific methods.
@@ -142,6 +158,7 @@ Task<Result<List<Order>>> GetUserOrdersAsync(int id, string? status, int? limit)
 | Attribute | Target | Description |
 |-----------|--------|-------------|
 | `[ServiceRoute("prefix")]` | Interface | Sets base route prefix for all methods |
+| `[ServiceRoute(ServiceRouteAttribute.NoPrefix)]` | Interface | Explicitly disables route prefix |
 | `[HttpGet("template")]` | Method | Uses HTTP GET |
 | `[HttpPost("template")]` | Method | Uses HTTP POST |
 | `[HttpPut("template")]` | Method | Uses HTTP PUT |
