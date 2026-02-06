@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.6] - 2026-02-06
+
+### Added
+
+- **ConsoleProxyDiagnostics** (Diagnostics):
+  - New `IProxyDiagnostics` implementation that writes directly to `Console.WriteLine` using string interpolation
+  - Works independently of any logging framework (no `ILogger` dependency)
+  - Useful when Serilog or other structured logging providers are not available
+  - DI extension: `services.AddProxyConsoleDiagnostics()`
+  - Accepts optional `TextWriter` for output redirection
+- **Diagnostics test project** (`Voyager.Common.Proxy.Diagnostics.Tests`):
+  - Tests for `ConsoleProxyDiagnostics` verifying output for all 5 event types and null fallbacks
+  - Tests for `LoggingProxyDiagnostics` proving structured message templates work correctly with any standard `ILogger` implementation (not just Serilog)
+
 ## [1.7.5] - 2026-02-04
 
 ### Added
