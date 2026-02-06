@@ -1,6 +1,6 @@
 # Voyager.Common.Proxy.Diagnostics
 
-Logging diagnostics handler for Voyager.Common.Proxy. Integrates with `Microsoft.Extensions.Logging` to provide structured logging for all proxy operations.
+Diagnostics handlers for Voyager.Common.Proxy. Provides two built-in `IProxyDiagnostics` implementations for logging proxy operations.
 
 ## Installation
 
@@ -10,15 +10,28 @@ dotnet add package Voyager.Common.Proxy.Diagnostics
 
 ## Usage
 
+### LoggingProxyDiagnostics (via ILogger)
+
+Uses `Microsoft.Extensions.Logging` with structured message templates. Works with any `ILogger` provider (Console, Serilog, NLog, etc.).
+
 ```csharp
-// Register logging and diagnostics
 services.AddLogging(builder => builder.AddConsole());
 services.AddProxyLoggingDiagnostics();
-
-// Register your service proxy
 services.AddServiceProxy<IUserService>("https://api.example.com");
+```
 
-// Optionally register user context provider
+### ConsoleProxyDiagnostics (direct Console.WriteLine)
+
+Writes directly to `Console.WriteLine` using string interpolation. No dependency on any logging framework - useful for quick debugging or environments without a configured logging provider.
+
+```csharp
+services.AddProxyConsoleDiagnostics();
+services.AddServiceProxy<IUserService>("https://api.example.com");
+```
+
+### User context (optional)
+
+```csharp
 services.AddProxyRequestContext<HttpContextRequestContext>();
 ```
 
