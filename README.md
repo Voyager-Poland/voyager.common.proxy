@@ -340,9 +340,12 @@ dotnet add package Voyager.Common.Proxy.Diagnostics
 Logging and observability for proxy operations:
 
 ```csharp
-// Add logging diagnostics
+// Option A: Structured logging via ILogger (works with any logging provider)
 services.AddLogging(b => b.AddConsole());
 services.AddProxyLoggingDiagnostics();
+
+// Option B: Direct console output (no logging framework required)
+services.AddProxyConsoleDiagnostics();
 
 // Add user context for request tracking
 services.AddHttpContextAccessor();
@@ -440,7 +443,7 @@ voyager.common.proxy/
 ├── src/
 │   ├── Voyager.Common.Proxy.Abstractions/     # HTTP attributes, diagnostic interfaces
 │   ├── Voyager.Common.Proxy.Client/           # Client proxy
-│   ├── Voyager.Common.Proxy.Diagnostics/      # Logging diagnostics handler
+│   ├── Voyager.Common.Proxy.Diagnostics/      # Logging & console diagnostics handlers
 │   ├── Voyager.Common.Proxy.Server.Abstractions/  # Server contracts
 │   ├── Voyager.Common.Proxy.Server.Core/      # Server core logic
 │   ├── Voyager.Common.Proxy.Server.AspNetCore/    # ASP.NET Core integration
@@ -448,6 +451,7 @@ voyager.common.proxy/
 ├── tests/
 │   ├── Voyager.Common.Proxy.Client.Tests/
 │   ├── Voyager.Common.Proxy.Client.IntegrationTests/
+│   ├── Voyager.Common.Proxy.Diagnostics.Tests/
 │   ├── Voyager.Common.Proxy.Server.Tests/
 │   └── Voyager.Common.Proxy.Server.IntegrationTests/
 ├── docs/
