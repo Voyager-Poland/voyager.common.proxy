@@ -18,7 +18,7 @@
 
 	<ItemGroup>
 		<!-- Required for IValidatableRequest which returns Result -->
-		<PackageReference Include="Voyager.Common.Results" Version="1.7.0" />
+		<PackageReference Include="Voyager.Common.Results" Version="1.7.1" />
 	</ItemGroup>
 
 </Project>

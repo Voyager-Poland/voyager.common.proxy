@@ -20,14 +20,12 @@
 		<PackageReference Include="System.Diagnostics.DiagnosticSource" Version="8.0.1" />
 		<PackageReference Include="System.Text.Json" Version="8.0.5" />
 		<!-- Required for request validation -->
-		<PackageReference Include="Voyager.Common.Results" Version="1.7.0" />
+		<PackageReference Include="Voyager.Common.Results" Version="1.7.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference
-			Include="..\Voyager.Common.Proxy.Abstractions\Voyager.Common.Proxy.Abstractions.csproj" />
-		<ProjectReference
-			Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
+		<ProjectReference Include="..\Voyager.Common.Proxy.Abstractions\Voyager.Common.Proxy.Abstractions.csproj" />
+		<ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
