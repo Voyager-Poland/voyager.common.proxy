@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.7] - 2026-02-06
+
+### Added
+
+- **Empty route prefix support** (Abstractions):
+  - New `ServiceRouteAttribute.NoPrefix` constant for services without a route prefix
+  - `[ServiceRoute("")]` and `[ServiceRoute(ServiceRouteAttribute.NoPrefix)]` are now allowed
+  - Enables integration with external APIs that expose endpoints directly under root path (e.g., `/NewOrder` instead of `/service-name/NewOrder`)
+  - Whitespace-only prefixes are still rejected (likely a mistake)
+  - See [ADR-012](docs/adr/ADR-012-Empty-ServiceRoute-Prefix.md) for design rationale
+
+## [Unreleased]
+
+### Changed
+
+- **NuGet package updates**:
+  - `Voyager.Common.Results` 1.7.0 → 1.7.1 (Abstractions, Server.Core)
+  - `coverlet.collector` 6.0.0/6.0.2 → 6.0.4 (all test projects)
+  - `Microsoft.NET.Test.Sdk` 17.8.0 → 17.12.0 (Server.Tests, Swagger.Core.Tests)
+  - `xunit` 2.5.3 → 2.9.2 (Server.Tests, Swagger.Core.Tests)
+  - `xunit.runner.visualstudio` 2.5.3 → 2.8.2 (Server.Tests, Swagger.Core.Tests)
+- **Cleanup**: Removed duplicate `Voyager.Common.Results` references from Server.AspNetCore and Server.Owin (already transitive via Server.Core)
+
 ## [1.7.6] - 2026-02-06
 
 ### Added
