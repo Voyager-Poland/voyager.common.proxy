@@ -1,5 +1,5 @@
 <Project>
-  <!--
+	<!--
     This file applies to ALL projects in this solution.
     Any .csproj file will automatically inherit these settings.
   -->
@@ -14,7 +14,7 @@
 		<TargetFrameworks>net48;net6.0;net8.0</TargetFrameworks>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>disable</ImplicitUsings>
-
+		<Authors>Andrzej Świstowski</Authors>
 		<Company>Sindbad IT Sp. z o.o.</Company>
 		<Copyright>Copyright © Sindbad IT sp. z o.o. $([System.DateTime]::Now.Year)</Copyright>
 	</PropertyGroup>
