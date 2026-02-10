@@ -38,7 +38,19 @@ public void ProcessPayment(string orderId) { }
 public bool ValidateUserCredentials(string username, string password) { }
 ```
 
-### Zmienne i parametry
+### Prywatne pola klas
+- **_camelCase** (prefiks podkreślenia + camelCase)
+- Prefiks `_` wyraźnie odróżnia pola klasy od zmiennych lokalnych i parametrów
+- Używaj precyzyjnych rzeczowników opisujących przechowywane dane
+
+```csharp
+private string _fileName;
+private string _configMountPath;
+private readonly IEncryptor _encryptor;
+private volatile bool _isProcessing;
+```
+
+### Zmienne lokalne i parametry
 - **camelCase** (pierwsze słowo małą literą, każde następne wielką)
 - Używaj precyzyjnych rzeczowników lub fraz rzeczownikowych
 - Unikaj zbyt ogólnych nazw (`data`, `info`, `value`)
@@ -49,14 +61,14 @@ string userEmail;
 bool isAuthenticated;
 ```
 
-### Stałe i pola readonly
-- **PascalCase** (C#) lub **UPPER_SNAKE_CASE** (w wielu językach)
+### Stałe i pola readonly statyczne
+- **PascalCase** (C#)
 - Używaj rzeczowników lub fraz rzeczownikowych
 - Nazwy powinny wskazywać na wartość, którą przechowują
 
 ```csharp
 const int MaxRetryCount = 5;
-private readonly TimeSpan DEFAULT_TIMEOUT = TimeSpan.FromSeconds(30);
+private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 ```
 
 ### Interfejsy
@@ -121,12 +133,13 @@ public void ValidateEmail_WithInvalidFormat_ThrowsValidationException()
 ## Nazewnictwo w programowaniu wielowątkowym
 
 1. **Dodawaj odpowiednie sufiksy i prefiksy wskazujące na współbieżność**
-   - Używaj sufiksów `Async` dla metod asynchronicznych
+   - Używaj sufiksów `Async` dla metod asynchronicznych — dotyczy **zarówno metod publicznych, jak i prywatnych**
    - Dodawaj `Task` do nazw metod zwracających `Task` lub `Task<T>`
    - Używaj prefiksu `Concurrent` dla kolekcji bezpiecznych wątkowo
 
 ```csharp
 public async Task<Result> ProcessPaymentAsync()
+private async Task<T> PostForAsync<T>(string endpoint, object content)  // prywatne też z Async
 public Task<User> GetUserByIdTaskAsync(int userId)
 ConcurrentDictionary<string, User> activeUsers;
 ```
@@ -141,7 +154,8 @@ private SemaphoreSlim _databaseConnectionSemaphore;
 ```
 
 3. **Jawnie oznaczaj zmienne współdzielone między wątkami**
-   - Używaj prefiksu `shared` lub `volatile` dla zmiennych odczytywanych/zapisywanych przez wiele wątków
+   - Stosuj standardowy prefiks `_` dla pól prywatnych (zgodnie z ogólną konwencją)
+   - Używaj `volatile` dla zmiennych odczytywanych/zapisywanych przez wiele wątków
    - Stosuj sufiksy `ThreadSafe` do klas bezpiecznych wątkowo
 
 ```csharp

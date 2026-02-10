@@ -73,6 +73,53 @@ public Result<User> GetUser(int userId)
 }
 ```
 
+### 1a. Wyjątek: Biblioteki infrastrukturalne i guard clauses
+
+**W bibliotekach infrastrukturalnych** (configuration providers, SDK, extensions) stosujemy
+standardowe konwencje .NET zamiast Result pattern:
+
+```csharp
+// ✅ Guard clauses w publicznym API biblioteki - zgodne z konwencjami .NET SDK
+public static IConfigurationBuilder AddMountConfiguration(
+    this IConfigurationBuilder builder,
+    SettingsProvider provider,
+    string filename = "appsettings")
+{
+    if (builder == null) throw new ArgumentNullException(nameof(builder));
+    if (provider == null) throw new ArgumentNullException(nameof(provider));
+    if (filename == null) throw new ArgumentNullException(nameof(filename));
+
+    var setting = provider.GetSettings(filename);
+    return AddMountConfiguration(builder, setting);
+}
+
+// ✅ Walidacja w setterach mutowalnych obiektów konfiguracyjnych
+public string FileName
+{
+    get => _fileName;
+    set
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("File name cannot be null or whitespace.", nameof(FileName));
+        _fileName = value;
+    }
+}
+
+// ✅ Custom exceptions dla specyficznych domen (patrz ADR-006)
+public class EncryptionException : Exception { }
+```
+
+**Kiedy stosować wyjątki zamiast Result:**
+- Guard clauses na granicach publicznego API biblioteki
+- Walidacja parametrów wejściowych (ArgumentNullException, ArgumentException)
+- Custom exceptions dla domen infrastrukturalnych (EncryptionException)
+- Zachowanie spójności z konwencjami .NET SDK (Microsoft.Extensions.*)
+
+**Kiedy stosować Result pattern:**
+- Logika biznesowa w aplikacjach (serwisy, use case'y, handlery)
+- Operacje, które mogą zakończyć się "oczekiwanym niepowodzeniem"
+- Warstwy aplikacji powyżej infrastruktury
+
 ### 2. Null Handling - NEVER Return Null
 
 **✅ ALWAYS DO:**

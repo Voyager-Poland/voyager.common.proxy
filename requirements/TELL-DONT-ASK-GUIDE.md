@@ -254,6 +254,52 @@ Jak każda zasada, "Tell Don't Ask" ma swoje wyjątki. Oto sytuacje, kiedy może
 2. **Warstwa prezentacji** - pobieranie danych do wyświetlenia jest naturalnym przypadkiem zastosowania getterów
 3. **Mapowanie obiektów** - podczas konwersji między różnymi reprezentacjami danych
 4. **Obiekty wartościowe (Value Objects)** - szczególnie te immutable, które są głównie nośnikami danych
+5. **Mutowalne obiekty konfiguracyjne (Mutable Configuration Objects)** - obiekty konfiguracyjne
+   używane we wzorcu `Action<TOptions>` wymagają publicznych setterów. Jest to standardowy
+   wzorzec w ekosystemie ASP.NET Core (`AddDbContext`, `AddMvc`, `AddAuthentication` itp.)
+
+### Mutowalne obiekty konfiguracyjne - szczegóły
+
+W bibliotekach infrastrukturalnych .NET stosujemy wzorzec mutowalnych obiektów konfiguracyjnych z **walidacją w setterach**. Obiekt konfiguracyjny sam pilnuje swoich invariantów - to jest zgodne z zasadą Tell Don't Ask:
+
+```csharp
+// ✅ DOBRZE - settery z walidacją (obiekt sam pilnuje swoich invariantów)
+public record Settings
+{
+    private string _fileName;
+
+    public string FileName
+    {
+        get => _fileName;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("File name cannot be null or whitespace.");
+            _fileName = value;
+        }
+    }
+}
+
+// Użycie we wzorcu Action<TOptions>:
+builder.AddMountConfiguration(settings =>
+{
+    settings.FileName = "database";    // walidacja w setterze
+    settings.Optional = false;
+});
+```
+
+```csharp
+// ❌ ŹLE - publiczne settery bez walidacji (brak ochrony invariantów)
+public class Settings
+{
+    public string FileName { get; set; }  // każdy może ustawić null/pusty string
+}
+```
+
+**Kluczowa zasada:** Mutowalne obiekty konfiguracyjne są akceptowalne gdy:
+- Settery zawierają **walidację** chroniącą invarianty obiektu
+- Obiekt jest używany we wzorcu `Action<T>` (konfiguracja przez lambda)
+- Po skonfigurowaniu obiekt jest przekazywany do infrastruktury (nie jest dalej modyfikowany)
 
 ## Jak ocenić, czy kod narusza zasadę "Tell Don't Ask"?
 
