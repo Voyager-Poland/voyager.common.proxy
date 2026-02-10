@@ -114,10 +114,11 @@ Każdy typ implementujący `IProxyRawResult` jest traktowany przez `ResponseWrit
 - `AspNetCoreResponseWriter` — implementacja `WriteRawAsync`
 - `OwinResponseWriter` — implementacja `WriteRawAsync`
 - `ServiceProxySwaggerGenerator` — 200 response używa custom content-type i inline string schema
+- `ResultMapper` — w `MapSuccessAsync`, gdy `valueType == string` i Content-Type odpowiedzi nie jest `application/json`, zwraca surowy string bez deserializacji JSON
 
 ### Zakres
 
 - **Serwer**: tak (ASP.NET Core + OWIN)
-- **Klient**: nie (callbacki są wywoływane przez zewnętrzny system, nie przez proxy klienta)
+- **Klient**: tak (`ResultMapper` wykrywa non-JSON Content-Type i zwraca surowy string)
 - **Swagger**: tak (custom content-type w 200 response, error responses zawsze `application/json`)
 - **Error path**: bez zmian (zawsze `application/json`)

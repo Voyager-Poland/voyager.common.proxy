@@ -20,11 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Custom Content-Type support** (Abstractions, Server.Core, Server.AspNetCore, Server.Owin, Swagger):
+- **Custom Content-Type support** (Abstractions, Server.Core, Server.AspNetCore, Server.Owin, Swagger, Client):
   - New `[ProducesContentType("text/html")]` attribute for methods returning non-JSON responses
   - When applied to a method returning `Result<string>`, the raw string value is written directly without JSON serialization
   - Error responses remain `application/json` regardless of the attribute
   - Swagger generates correct content-type and inline string schema for decorated methods
+  - Client proxy: `ResultMapper` detects non-JSON Content-Type in responses and returns raw string without JSON deserialization
   - Enables migration of payment callback endpoints (ePay) that require `text/html` responses
   - See [ADR-013](docs/adr/ADR-013-Custom-Content-Type-Support.md) for design rationale
 
