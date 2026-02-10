@@ -65,6 +65,17 @@ internal sealed class OwinResponseWriter : IResponseWriter
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public async Task WriteRawAsync(string content, string contentType, int statusCode)
+    {
+        SetStatusCode(statusCode);
+        SetContentType(contentType);
+
+        var body = GetResponseBody();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        await body.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+    }
+
     private void SetStatusCode(int statusCode)
     {
         _environment["owin.ResponseStatusCode"] = statusCode;

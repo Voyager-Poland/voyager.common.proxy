@@ -84,6 +84,16 @@ public class ServiceProxySwaggerGeneratorTests
         public decimal Amount { get; set; }
     }
 
+    [ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+    public interface ICallbackService
+    {
+        [HttpMethod(ProxyHttpMethod.Post, "callback")]
+        [ProducesContentType("text/html")]
+        Task<Result<string>> HandleCallbackAsync(string data);
+
+        Task<Result<string>> GetStatusAsync();
+    }
+
     #endregion
 
     #region GeneratePaths Tests
@@ -356,6 +366,56 @@ public class ServiceProxySwaggerGeneratorTests
         Assert.NotNull(successResponse.Schema);
         Assert.Equal("array", successResponse.Schema.Type);
         Assert.NotNull(successResponse.Schema.Items);
+    }
+
+    #endregion
+
+    #region Custom Content-Type Tests
+
+    [Fact]
+    public void GeneratePaths_WithProducesContentType_UsesCustomContentType()
+    {
+        var paths = _generator.GeneratePaths<ICallbackService>();
+        var callbackPath = paths.First(p => p.Operation.OperationId == "HandleCallback");
+
+        var successResponse = callbackPath.Operation.Responses.First(r => r.StatusCode == 200);
+
+        Assert.Equal("text/html", successResponse.ContentType);
+    }
+
+    [Fact]
+    public void GeneratePaths_WithProducesContentType_StringSchema_IsInlineString()
+    {
+        var paths = _generator.GeneratePaths<ICallbackService>();
+        var callbackPath = paths.First(p => p.Operation.OperationId == "HandleCallback");
+
+        var successResponse = callbackPath.Operation.Responses.First(r => r.StatusCode == 200);
+
+        Assert.NotNull(successResponse.Schema);
+        Assert.Equal("string", successResponse.Schema.Type);
+        Assert.False(successResponse.Schema.IsReference);
+    }
+
+    [Fact]
+    public void GeneratePaths_WithoutProducesContentType_UsesApplicationJson()
+    {
+        var paths = _generator.GeneratePaths<ICallbackService>();
+        var statusPath = paths.First(p => p.Operation.OperationId == "GetStatus");
+
+        var successResponse = statusPath.Operation.Responses.First(r => r.StatusCode == 200);
+
+        Assert.Equal("application/json", successResponse.ContentType);
+    }
+
+    [Fact]
+    public void GeneratePaths_WithProducesContentType_ErrorResponsesStillJson()
+    {
+        var paths = _generator.GeneratePaths<ICallbackService>();
+        var callbackPath = paths.First(p => p.Operation.OperationId == "HandleCallback");
+
+        var errorResponse = callbackPath.Operation.Responses.First(r => r.StatusCode == 400);
+
+        Assert.Equal("application/json", errorResponse.ContentType);
     }
 
     #endregion

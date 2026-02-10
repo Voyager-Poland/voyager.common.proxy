@@ -53,6 +53,12 @@ public class RequestValidationTests
             StatusCode = 204;
             return Task.CompletedTask;
         }
+
+        public Task WriteRawAsync(string content, string contentType, int statusCode)
+        {
+            StatusCode = statusCode;
+            return Task.CompletedTask;
+        }
     }
 
     #endregion

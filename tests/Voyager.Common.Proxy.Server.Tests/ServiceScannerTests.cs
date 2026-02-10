@@ -93,6 +93,16 @@ public class ServiceScannerTests
         public List<string> Items { get; set; } = new();
     }
 
+    [ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+    public interface ICallbackService
+    {
+        [HttpMethod(ProxyHttpMethod.Post, "callback")]
+        [ProducesContentType("text/html")]
+        Task<Result<string>> HandleCallbackAsync(string data);
+
+        Task<Result<string>> GetStatusAsync();
+    }
+
     #endregion
 
     #region ScanInterface Tests
@@ -358,6 +368,28 @@ public class ServiceScannerTests
 
         Assert.Equal("GetUserAsync", getEndpoint.Method.Name);
         Assert.Equal(typeof(IUserService), getEndpoint.Method.DeclaringType);
+    }
+
+    #endregion
+
+    #region ContentType Tests
+
+    [Fact]
+    public void ScanInterface_WithProducesContentType_SetsContentType()
+    {
+        var endpoints = _scanner.ScanInterface<ICallbackService>();
+        var callbackEndpoint = endpoints.First(e => e.Method.Name == "HandleCallbackAsync");
+
+        Assert.Equal("text/html", callbackEndpoint.ContentType);
+    }
+
+    [Fact]
+    public void ScanInterface_WithoutProducesContentType_ContentTypeIsNull()
+    {
+        var endpoints = _scanner.ScanInterface<ICallbackService>();
+        var statusEndpoint = endpoints.First(e => e.Method.Name == "GetStatusAsync");
+
+        Assert.Null(statusEndpoint.ContentType);
     }
 
     #endregion

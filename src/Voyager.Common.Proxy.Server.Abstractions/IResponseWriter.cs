@@ -26,4 +26,12 @@ public interface IResponseWriter
     /// Writes a 204 No Content response.
     /// </summary>
     Task WriteNoContentAsync();
+
+    /// <summary>
+    /// Writes a raw string response with the specified content type and status code.
+    /// </summary>
+    /// <param name="content">The raw string content to write.</param>
+    /// <param name="contentType">The content type (e.g., "text/html").</param>
+    /// <param name="statusCode">The HTTP status code.</param>
+    Task WriteRawAsync(string content, string contentType, int statusCode);
 }

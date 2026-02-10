@@ -85,6 +85,7 @@ public class ServiceScanner
         var httpMethod = GetHttpMethod(method);
         var routeTemplate = BuildRouteTemplate(method, servicePrefix);
         var parameters = BuildParameterDescriptors(method, routeTemplate, httpMethod);
+        var contentType = method.GetCustomAttribute<ProducesContentTypeAttribute>()?.ContentType;
 
         return new EndpointDescriptor(
             serviceType,
@@ -93,7 +94,8 @@ public class ServiceScanner
             routeTemplate,
             parameters,
             resultType,
-            resultValueType);
+            resultValueType,
+            contentType);
     }
 
     private static (Type? resultType, Type? valueType) GetResultTypes(Type returnType)

@@ -45,6 +45,11 @@ public sealed class EndpointDescriptor
     public Type? ResultValueType { get; }
 
     /// <summary>
+    /// Gets the custom content type for the success response, or null to use the default (application/json).
+    /// </summary>
+    public string? ContentType { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EndpointDescriptor"/> class.
     /// </summary>
     public EndpointDescriptor(
@@ -54,7 +59,8 @@ public sealed class EndpointDescriptor
         string routeTemplate,
         IReadOnlyList<ParameterDescriptor> parameters,
         Type returnType,
-        Type? resultValueType)
+        Type? resultValueType,
+        string? contentType = null)
     {
         ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
         Method = method ?? throw new ArgumentNullException(nameof(method));
@@ -63,5 +69,6 @@ public sealed class EndpointDescriptor
         Parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         ReturnType = returnType ?? throw new ArgumentNullException(nameof(returnType));
         ResultValueType = resultValueType;
+        ContentType = contentType;
     }
 }

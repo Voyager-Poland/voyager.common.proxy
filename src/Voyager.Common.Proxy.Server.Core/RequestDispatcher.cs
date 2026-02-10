@@ -240,7 +240,10 @@ public class RequestDispatcher
 
                 if (value != null)
                 {
-                    await responseWriter.WriteJsonAsync(value, 200);
+                    if (endpoint.ContentType != null && value is string stringValue)
+                        await responseWriter.WriteRawAsync(stringValue, endpoint.ContentType, 200);
+                    else
+                        await responseWriter.WriteJsonAsync(value, 200);
                     return (200, true, null, null);
                 }
                 else
