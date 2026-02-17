@@ -6,6 +6,7 @@ using Voyager.Common.Proxy.Abstractions;
 using Voyager.Common.Proxy.Client.Internal;
 using Voyager.Common.Results;
 using Xunit;
+using HttpMethod = Voyager.Common.Proxy.Abstractions.HttpMethod;
 
 public class RouteBuilderTests
 {
