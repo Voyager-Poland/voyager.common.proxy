@@ -5,8 +5,8 @@ root = true
 
 # All files
 [*]
-indent_style = space
-indent_size = 4
+indent_style = tabs
+indent_size = 2
 insert_final_newline = true
 trim_trailing_whitespace = true
 
@@ -31,7 +31,7 @@ trim_trailing_whitespace = false
 
 #### Core EditorConfig Options ####
 
-tab_width = 4
+tab_width = 2
 
 # New line preferences
 end_of_line = crlf
