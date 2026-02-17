@@ -87,6 +87,14 @@ public class ServiceScanner
         var parameters = BuildParameterDescriptors(method, routeTemplate, httpMethod);
         var contentType = method.GetCustomAttribute<ProducesContentTypeAttribute>()?.ContentType;
 
+        if (contentType != null && resultValueType != typeof(string))
+        {
+            throw new InvalidOperationException(
+                $"[ProducesContentType] on method '{method.DeclaringType?.Name}.{method.Name}' " +
+                $"is only supported for methods returning Result<string>. " +
+                $"Actual result value type: '{resultValueType?.FullName ?? "void"}'.");
+        }
+
         return new EndpointDescriptor(
             serviceType,
             method,

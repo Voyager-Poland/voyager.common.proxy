@@ -240,10 +240,23 @@ public class RequestDispatcher
 
                 if (value != null)
                 {
-                    if (endpoint.ContentType != null && value is string stringValue)
-                        await responseWriter.WriteRawAsync(stringValue, endpoint.ContentType, 200);
+                    if (endpoint.ContentType != null)
+                    {
+                        if (value is string stringValue)
+                        {
+                            await responseWriter.WriteRawAsync(stringValue, endpoint.ContentType, 200);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                $"Endpoint content type '{endpoint.ContentType}' is only supported for string results. " +
+                                $"Result value type was '{value.GetType().FullName}'.");
+                        }
+                    }
                     else
+                    {
                         await responseWriter.WriteJsonAsync(value, 200);
+                    }
                     return (200, true, null, null);
                 }
                 else

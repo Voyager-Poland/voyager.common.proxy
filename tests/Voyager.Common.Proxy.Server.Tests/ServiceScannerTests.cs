@@ -103,6 +103,12 @@ public class ServiceScannerTests
         Task<Result<string>> GetStatusAsync();
     }
 
+    public interface IInvalidContentTypeService
+    {
+        [ProducesContentType("text/html")]
+        Task<Result<Order>> GetOrderHtmlAsync(int id);
+    }
+
     #endregion
 
     #region ScanInterface Tests
@@ -390,6 +396,16 @@ public class ServiceScannerTests
         var statusEndpoint = endpoints.First(e => e.Method.Name == "GetStatusAsync");
 
         Assert.Null(statusEndpoint.ContentType);
+    }
+
+    [Fact]
+    public void ScanInterface_WithProducesContentTypeOnNonStringResult_ThrowsInvalidOperationException()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => _scanner.ScanInterface<IInvalidContentTypeService>());
+
+        Assert.Contains("ProducesContentType", ex.Message);
+        Assert.Contains("Result<string>", ex.Message);
     }
 
     #endregion
