@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-18
+
+### Added
+
+- **Custom Content-Type support** (Abstractions, Server.Core, Server.AspNetCore, Server.Owin, Swagger, Client):
+  - New `[ProducesContentType("text/html")]` attribute for methods returning non-JSON responses
+  - When applied to a method returning `Result<string>`, the raw string value is written directly without JSON serialization
+  - Error responses remain `application/json` regardless of the attribute
+  - Fail-fast validation at scan time: `[ProducesContentType]` on non-`Result<string>` methods throws `InvalidOperationException`
+  - Swagger generates correct content-type and inline string schema for decorated methods
+  - Client proxy: `ResultMapper` detects non-JSON Content-Type in responses and returns raw string without JSON deserialization
+  - Enables migration of payment callback endpoints (ePay) that require `text/html` responses
+  - See [ADR-013](docs/adr/ADR-013-Custom-Content-Type-Support.md) for design rationale
+- **Atlassian Compass** component registration (`compass.yml`)
+
+### Fixed
+
+- **OWIN WriteRawAsync**: Added `charset=utf-8` to Content-Type header for parity with ASP.NET Core
+- **IDE0060**: Removed unused parameter warnings in Swagger.Core
+
+### Changed
+
+- **NuGet package updates**:
+  - `Voyager.Common.Results` 1.7.1 → 1.8.0 (Abstractions, Server.Core, Client)
+  - `Voyager.Common.Resilience` 1.7.1 → 1.8.0 (Client)
+  - `xunit` 2.9.2 → 2.9.3 (all test projects)
+  - `coverlet.collector` 6.0.0/6.0.2 → 6.0.4 (all test projects)
+  - `Microsoft.NET.Test.Sdk` 17.8.0 → 17.12.0 (Server.Tests, Swagger.Core.Tests)
+  - `xunit.runner.visualstudio` 2.5.3 → 2.8.2 (Server.Tests, Swagger.Core.Tests)
+- **Cleanup**: Removed duplicate `Voyager.Common.Results` references from Server.AspNetCore and Server.Owin (already transitive via Server.Core)
+- Added `.editorconfig` with tab indentation and fixed `CS0104` HttpMethod ambiguity
+
 ## [1.7.7] - 2026-02-06
 
 ### Added
@@ -15,29 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables integration with external APIs that expose endpoints directly under root path (e.g., `/NewOrder` instead of `/service-name/NewOrder`)
   - Whitespace-only prefixes are still rejected (likely a mistake)
   - See [ADR-012](docs/adr/ADR-012-Empty-ServiceRoute-Prefix.md) for design rationale
-
-## [Unreleased]
-
-### Added
-
-- **Custom Content-Type support** (Abstractions, Server.Core, Server.AspNetCore, Server.Owin, Swagger, Client):
-  - New `[ProducesContentType("text/html")]` attribute for methods returning non-JSON responses
-  - When applied to a method returning `Result<string>`, the raw string value is written directly without JSON serialization
-  - Error responses remain `application/json` regardless of the attribute
-  - Swagger generates correct content-type and inline string schema for decorated methods
-  - Client proxy: `ResultMapper` detects non-JSON Content-Type in responses and returns raw string without JSON deserialization
-  - Enables migration of payment callback endpoints (ePay) that require `text/html` responses
-  - See [ADR-013](docs/adr/ADR-013-Custom-Content-Type-Support.md) for design rationale
-
-### Changed
-
-- **NuGet package updates**:
-  - `Voyager.Common.Results` 1.7.0 → 1.7.1 (Abstractions, Server.Core)
-  - `coverlet.collector` 6.0.0/6.0.2 → 6.0.4 (all test projects)
-  - `Microsoft.NET.Test.Sdk` 17.8.0 → 17.12.0 (Server.Tests, Swagger.Core.Tests)
-  - `xunit` 2.5.3 → 2.9.2 (Server.Tests, Swagger.Core.Tests)
-  - `xunit.runner.visualstudio` 2.5.3 → 2.8.2 (Server.Tests, Swagger.Core.Tests)
-- **Cleanup**: Removed duplicate `Voyager.Common.Results` references from Server.AspNetCore and Server.Owin (already transitive via Server.Core)
 
 ## [1.7.6] - 2026-02-06
 
