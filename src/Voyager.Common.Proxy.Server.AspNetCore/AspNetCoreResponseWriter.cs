@@ -46,6 +46,13 @@ internal sealed class AspNetCoreResponseWriter : IResponseWriter
         return Task.CompletedTask;
     }
 
+    public Task WriteRawAsync(string content, string contentType, int statusCode)
+    {
+        _response.StatusCode = statusCode;
+        _response.ContentType = contentType;
+        return _response.WriteAsync(content);
+    }
+
     /// <summary>
     /// Maps ErrorType string to HTTP status code using centralized classification.
     /// </summary>

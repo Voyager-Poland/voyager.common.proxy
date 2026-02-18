@@ -348,7 +348,7 @@ public class ResultMapperTests
     {
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("\"hello world\"")
+            Content = new StringContent("\"hello world\"", System.Text.Encoding.UTF8, "application/json")
         };
 
         var result = await ResultMapper.MapResponseAsync(response, typeof(Result<string>), JsonOptions);
@@ -375,6 +375,92 @@ public class ResultMapperTests
         var typedResult = (Result<List<User>>)result;
         typedResult.IsSuccess.Should().BeTrue();
         typedResult.Value.Should().HaveCount(2);
+    }
+
+    #endregion
+
+    #region Non-JSON Content-Type Tests
+
+    [Fact]
+    public async Task MapResponseAsync_TextHtmlContentType_ReturnsRawString()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("OK", System.Text.Encoding.UTF8, "text/html")
+        };
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<string>), JsonOptions);
+
+        result.Should().BeOfType<Result<string>>();
+        var typedResult = (Result<string>)result;
+        typedResult.IsSuccess.Should().BeTrue();
+        typedResult.Value.Should().Be("OK");
+    }
+
+    [Fact]
+    public async Task MapResponseAsync_TextPlainContentType_ReturnsRawString()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("healthy", System.Text.Encoding.UTF8, "text/plain")
+        };
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<string>), JsonOptions);
+
+        result.Should().BeOfType<Result<string>>();
+        var typedResult = (Result<string>)result;
+        typedResult.IsSuccess.Should().BeTrue();
+        typedResult.Value.Should().Be("healthy");
+    }
+
+    [Fact]
+    public async Task MapResponseAsync_ApplicationJsonContentType_StillDeserializesJson()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("\"hello world\"", System.Text.Encoding.UTF8, "application/json")
+        };
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<string>), JsonOptions);
+
+        result.Should().BeOfType<Result<string>>();
+        var typedResult = (Result<string>)result;
+        typedResult.IsSuccess.Should().BeTrue();
+        typedResult.Value.Should().Be("hello world");
+    }
+
+    [Fact]
+    public async Task MapResponseAsync_NonJsonContentType_NonStringType_StillDeserializesJson()
+    {
+        // Even with text/plain content type, non-string types should still attempt JSON deserialization
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("42", System.Text.Encoding.UTF8, "text/plain")
+        };
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<int>), JsonOptions);
+
+        result.Should().BeOfType<Result<int>>();
+        var typedResult = (Result<int>)result;
+        typedResult.IsSuccess.Should().BeTrue();
+        typedResult.Value.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task MapResponseAsync_NoContentTypeHeader_DefaultsToJsonDeserialization()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes("\"json-string\""))
+        };
+        // ByteArrayContent has no Content-Type by default — simulates missing header
+
+        var result = await ResultMapper.MapResponseAsync(response, typeof(Result<string>), JsonOptions);
+
+        result.Should().BeOfType<Result<string>>();
+        var typedResult = (Result<string>)result;
+        typedResult.IsSuccess.Should().BeTrue();
+        typedResult.Value.Should().Be("json-string");
     }
 
     #endregion

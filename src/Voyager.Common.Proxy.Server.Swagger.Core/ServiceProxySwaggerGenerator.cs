@@ -172,7 +172,7 @@ public class ServiceProxySwaggerGenerator
 
     private List<ParameterDefinition> ExpandRouteAndQueryParameters(
         ParameterDescriptor param,
-        string routeTemplate,
+        string _,
         List<string> routeParams)
     {
         var parameters = new List<ParameterDefinition>();
@@ -267,8 +267,14 @@ public class ServiceProxySwaggerGenerator
         // Success response - unwrap Result<T> to T
         if (endpoint.ResultValueType != null)
         {
-            var schema = _schemaGenerator.GenerateSchema(endpoint.ResultValueType);
-            responses.Add(new ResponseDefinition(200, "Success", "application/json", schema));
+            var isStringResult = endpoint.ResultValueType == typeof(string);
+            var useCustomContentType = isStringResult && !string.IsNullOrWhiteSpace(endpoint.ContentType);
+            var contentType = useCustomContentType ? endpoint.ContentType! : "application/json";
+
+            var schema = useCustomContentType
+                ? new SchemaDefinition("string", format: null)
+                : _schemaGenerator.GenerateSchema(endpoint.ResultValueType);
+            responses.Add(new ResponseDefinition(200, "Success", contentType, schema));
         }
         else
         {

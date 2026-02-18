@@ -48,6 +48,17 @@ public interface IOrderService
     Task<Result> DeleteOrderAsync(int id, CancellationToken cancellationToken);
 }
 
+[ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+public interface ISaleService
+{
+    [HttpMethod(ProxyHttpMethod.Post, "sale/callback")]
+    [ProducesContentType("text/html")]
+    Task<Result<string>> HandleCallbackAsync(string data, CancellationToken cancellationToken);
+
+    [ProducesContentType("text/plain")]
+    Task<Result<string>> GetStatusAsync(CancellationToken cancellationToken);
+}
+
 #endregion
 
 #region Service Implementations
@@ -183,6 +194,19 @@ public class InMemoryOrderService : IOrderService
             return Task.FromResult(Result.Failure(Error.NotFoundError($"Order {id} not found")));
         }
         return Task.FromResult(Result.Success());
+    }
+}
+
+public class InMemorySaleService : ISaleService
+{
+    public Task<Result<string>> HandleCallbackAsync(string data, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(Result<string>.Success("OK"));
+    }
+
+    public Task<Result<string>> GetStatusAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult(Result<string>.Success("healthy"));
     }
 }
 

@@ -268,6 +268,29 @@ public interface IExternalPaymentApi
 }
 ```
 
+### Custom Content-Type
+
+For endpoints that need to return non-JSON responses (e.g., payment callbacks returning `text/html`):
+
+```csharp
+[ServiceRoute(ServiceRouteAttribute.NoPrefix)]
+public interface IPaymentCallbackService
+{
+    [HttpPost("callback")]
+    [ProducesContentType("text/html")]
+    Task<Result<string>> HandleCallbackAsync(CallbackRequest request, CancellationToken cancellationToken);
+    // POST /callback
+    // Response: 200, Content-Type: text/html, Body: OK (raw string, no JSON quotes)
+
+    [ProducesContentType("text/plain")]
+    Task<Result<string>> GetStatusAsync(CancellationToken cancellationToken);
+    // GET /get-status
+    // Response: 200, Content-Type: text/plain, Body: healthy
+}
+```
+
+When `[ProducesContentType]` is applied to a method returning `Result<string>`, the string value is written directly to the response body without JSON serialization. Error responses always remain `application/json`.
+
 ## Authorization
 
 Add authorization to server endpoints using attributes or configuration:
@@ -321,6 +344,7 @@ Zero-dependency package providing optional attributes:
 - `[RequireAuthorization]` - Require authentication
 - `[RequireAuthorization("Policy")]` - Require specific policy
 - `[AllowAnonymous]` - Allow anonymous access (override interface-level auth)
+- `[ProducesContentType("text/html")]` - Custom response content type (server-side only)
 
 ### Client
 

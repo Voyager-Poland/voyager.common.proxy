@@ -63,6 +63,15 @@ namespace Voyager.Common.Proxy.Client.Internal
                 return CreateSuccessResult(resultType, valueType, GetDefaultValue(valueType));
             }
 
+            // When the response has a non-JSON content type and the target type is string,
+            // return the raw content directly without JSON deserialization.
+            // This supports [ProducesContentType("text/html")] and similar scenarios
+            // where the server returns raw string responses (e.g., payment callbacks).
+            if (valueType == typeof(string) && !IsJsonContentType(response))
+            {
+                return CreateSuccessResult(resultType, valueType, content);
+            }
+
             var value = JsonSerializer.Deserialize(content, valueType, jsonOptions);
             return CreateSuccessResult(resultType, valueType, value);
         }
@@ -237,6 +246,19 @@ namespace Voyager.Common.Proxy.Client.Internal
         private static object? GetDefaultValue(Type type)
         {
             return type.IsValueType ? Activator.CreateInstance(type) : null;
+        }
+
+        /// <summary>
+        /// Checks whether the response has a JSON content type.
+        /// Missing Content-Type is treated as JSON for backward compatibility —
+        /// the proxy server always sets Content-Type explicitly, but third-party
+        /// servers or test stubs may omit it, and prior to this change all
+        /// responses were unconditionally deserialized as JSON.
+        /// </summary>
+        private static bool IsJsonContentType(HttpResponseMessage response)
+        {
+            var mediaType = response.Content?.Headers?.ContentType?.MediaType;
+            return mediaType == null || mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

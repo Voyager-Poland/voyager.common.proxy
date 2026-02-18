@@ -51,6 +51,17 @@ public class RequestDispatcherTests
             StatusCode = 204;
             return Task.CompletedTask;
         }
+
+        public string? RawContent { get; private set; }
+        public string? RawContentType { get; private set; }
+
+        public Task WriteRawAsync(string content, string contentType, int statusCode)
+        {
+            StatusCode = statusCode;
+            RawContent = content;
+            RawContentType = contentType;
+            return Task.CompletedTask;
+        }
     }
 
     public interface ITestService
@@ -61,6 +72,31 @@ public class RequestDispatcherTests
         Task<Result<User>> CreateUserAsync(CreateUserRequest request);
         Task<Result<User>> FailingMethodAsync();
         Task<Result<User>> ThrowingMethodAsync();
+    }
+
+    public interface ICallbackTestService
+    {
+        Task<Result<string>> HandleCallbackAsync();
+        Task<Result<string>> HandleNullCallbackAsync();
+        Task<Result<string>> HandleFailedCallbackAsync();
+    }
+
+    public class CallbackTestService : ICallbackTestService
+    {
+        public Task<Result<string>> HandleCallbackAsync()
+        {
+            return Task.FromResult(Result<string>.Success("OK"));
+        }
+
+        public Task<Result<string>> HandleNullCallbackAsync()
+        {
+            return Task.FromResult(Result<string>.Success(null!));
+        }
+
+        public Task<Result<string>> HandleFailedCallbackAsync()
+        {
+            return Task.FromResult(Result<string>.Failure(Error.NotFoundError("Not found")));
+        }
     }
 
     public class TestService : ITestService
@@ -160,6 +196,53 @@ public class RequestDispatcherTests
             parameters,
             resultType!,
             resultValueType);
+    }
+
+    private static EndpointDescriptor CreateEndpointWithContentType<TService>(string methodName, string? contentType)
+    {
+        var method = typeof(TService).GetMethod(methodName)!;
+        var parameters = new List<ParameterDescriptor>();
+
+        foreach (var param in method.GetParameters())
+        {
+            ParameterSource source;
+            if (param.ParameterType == typeof(CancellationToken))
+                source = ParameterSource.CancellationToken;
+            else if (param.ParameterType.IsClass && param.ParameterType != typeof(string))
+                source = ParameterSource.Body;
+            else
+                source = ParameterSource.Query;
+
+            parameters.Add(new ParameterDescriptor(
+                param.Name!,
+                param.ParameterType,
+                source,
+                param.HasDefaultValue,
+                param.DefaultValue));
+        }
+
+        var returnType = method.ReturnType;
+        Type? resultType = null;
+        Type? resultValueType = null;
+
+        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
+        {
+            var innerType = returnType.GetGenericArguments()[0];
+            resultType = innerType;
+
+            if (innerType.IsGenericType && innerType.GetGenericTypeDefinition() == typeof(Result<>))
+                resultValueType = innerType.GetGenericArguments()[0];
+        }
+
+        return new EndpointDescriptor(
+            typeof(TService),
+            method,
+            "POST",
+            "/callback",
+            parameters,
+            resultType!,
+            resultValueType,
+            contentType);
     }
 
     private static Stream CreateJsonBody<T>(T value)
@@ -295,6 +378,70 @@ public class RequestDispatcherTests
 
         Assert.NotNull(responseWriter.ErrorType);
         Assert.NotNull(responseWriter.ErrorMessage);
+    }
+
+    #endregion
+
+    #region Custom Content-Type Tests
+
+    [Fact]
+    public async Task Dispatch_WithProducesContentType_WritesRawString()
+    {
+        var context = new TestRequestContext();
+        var responseWriter = new TestResponseWriter();
+        var endpoint = CreateEndpointWithContentType<ICallbackTestService>("HandleCallbackAsync", "text/html");
+        var service = new CallbackTestService();
+
+        await _dispatcher.DispatchAsync(context, responseWriter, endpoint, service);
+
+        Assert.Equal(200, responseWriter.StatusCode);
+        Assert.Equal("OK", responseWriter.RawContent);
+        Assert.Equal("text/html", responseWriter.RawContentType);
+        Assert.Null(responseWriter.WrittenValue);
+    }
+
+    [Fact]
+    public async Task Dispatch_WithProducesContentType_NullValue_WritesNoContent()
+    {
+        var context = new TestRequestContext();
+        var responseWriter = new TestResponseWriter();
+        var endpoint = CreateEndpointWithContentType<ICallbackTestService>("HandleNullCallbackAsync", "text/html");
+        var service = new CallbackTestService();
+
+        await _dispatcher.DispatchAsync(context, responseWriter, endpoint, service);
+
+        Assert.True(responseWriter.NoContentWritten);
+        Assert.Equal(204, responseWriter.StatusCode);
+    }
+
+    [Fact]
+    public async Task Dispatch_WithProducesContentType_Error_WritesJsonError()
+    {
+        var context = new TestRequestContext();
+        var responseWriter = new TestResponseWriter();
+        var endpoint = CreateEndpointWithContentType<ICallbackTestService>("HandleFailedCallbackAsync", "text/html");
+        var service = new CallbackTestService();
+
+        await _dispatcher.DispatchAsync(context, responseWriter, endpoint, service);
+
+        Assert.NotNull(responseWriter.ErrorType);
+        Assert.NotNull(responseWriter.ErrorMessage);
+        Assert.Null(responseWriter.RawContent);
+    }
+
+    [Fact]
+    public async Task Dispatch_WithoutProducesContentType_WritesJson()
+    {
+        var context = new TestRequestContext();
+        var responseWriter = new TestResponseWriter();
+        var endpoint = CreateEndpointWithContentType<ICallbackTestService>("HandleCallbackAsync", null);
+        var service = new CallbackTestService();
+
+        await _dispatcher.DispatchAsync(context, responseWriter, endpoint, service);
+
+        Assert.Equal(200, responseWriter.StatusCode);
+        Assert.NotNull(responseWriter.WrittenValue);
+        Assert.Null(responseWriter.RawContent);
     }
 
     #endregion

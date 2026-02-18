@@ -3,6 +3,7 @@ namespace Voyager.Common.Proxy.Server.Owin;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Voyager.Common.Proxy.Server.Abstractions;
@@ -63,6 +64,17 @@ internal sealed class OwinResponseWriter : IResponseWriter
     {
         SetStatusCode(204);
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task WriteRawAsync(string content, string contentType, int statusCode)
+    {
+        SetStatusCode(statusCode);
+        SetContentType($"{contentType}; charset=utf-8");
+
+        var body = GetResponseBody();
+        var bytes = Encoding.UTF8.GetBytes(content);
+        await body.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
     }
 
     private void SetStatusCode(int statusCode)

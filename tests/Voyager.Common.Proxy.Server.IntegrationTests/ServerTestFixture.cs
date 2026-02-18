@@ -27,6 +27,7 @@ public class ServerTestFixture : IDisposable
                     // Register test services as singletons to preserve state during tests
                     services.AddSingleton<IUserService, InMemoryUserService>();
                     services.AddSingleton<IOrderService, InMemoryOrderService>();
+                    services.AddSingleton<ISaleService, InMemorySaleService>();
                     services.AddRouting();
                 });
                 webBuilder.Configure(app =>
@@ -36,6 +37,7 @@ public class ServerTestFixture : IDisposable
                     {
                         endpoints.MapServiceProxy<IUserService>();
                         endpoints.MapServiceProxy<IOrderService>();
+                        endpoints.MapServiceProxy<ISaleService>();
                     });
                 });
             })
