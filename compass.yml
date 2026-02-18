@@ -1,0 +1,33 @@
+name: Voyager.Common.Proxy
+id: 'ari:cloud:compass:6f4ff44f-3daf-4331-936e-f105ac8a0cc5:component/dbdd9e20-37cf-4147-9a6c-5bc93cc76ce7/832c829e-b13d-477b-9dbb-557dfc49284f'
+description: 'Biblioteka proxy do generowania klientów i serwerów HTTP na podstawie interfejsów .NET. Wspiera ASP.NET Core, OWIN, Swagger, resilience (retry, circuit breaker) oraz diagnostykę.'
+configVersion: 1
+typeId: LIBRARY
+ownerId: 'ari:cloud:identity::team/e332590f-359b-4437-86b1-6c1491faae24'
+fields:
+  tier: 4
+  isMonorepoProject: false
+links:
+  - name: ''
+    type: REPOSITORY
+    url: 'https://github.com/Voyager-Poland/voyager.common.proxy.git'
+relationships:
+  DEPENDS_ON:
+    - 'ari:cloud:compass:6f4ff44f-3daf-4331-936e-f105ac8a0cc5:component/dbdd9e20-37cf-4147-9a6c-5bc93cc76ce7/412e1b50-00c4-45ff-9695-7e45ba67128f'
+labels:
+  - nuget
+  - proxy
+  - dotnet
+customFields:
+  - name: Domena działalności
+    type: single_select
+    value: 59eea4d3-afdd-453e-8f81-f330509bf19a
+  - name: SQLLogin
+    type: text
+    value: null
+  - name: SVNRepository
+    type: text
+    value: null
+  
+# Learn more about formatting compass.yml:
+# https://go.atlassian.com/compass-yml-format

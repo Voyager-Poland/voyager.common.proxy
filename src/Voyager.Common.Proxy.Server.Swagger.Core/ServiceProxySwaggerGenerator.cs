@@ -172,7 +172,7 @@ public class ServiceProxySwaggerGenerator
 
     private List<ParameterDefinition> ExpandRouteAndQueryParameters(
         ParameterDescriptor param,
-        string routeTemplate,
+        string _,
         List<string> routeParams)
     {
         var parameters = new List<ParameterDefinition>();

@@ -122,3 +122,12 @@ Każdy typ implementujący `IProxyRawResult` jest traktowany przez `ResponseWrit
 - **Klient**: tak (`ResultMapper` wykrywa non-JSON Content-Type i zwraca surowy string)
 - **Swagger**: tak (custom content-type w 200 response, error responses zawsze `application/json`)
 - **Error path**: bez zmian (zawsze `application/json`)
+
+### Breaking change: `IResponseWriter.WriteRawAsync`
+
+Dodanie `WriteRawAsync` do istniejącego interfejsu `IResponseWriter` jest breaking change dla implementacji zewnętrznych (własne testy, mocki, dekoratory). Rozważone alternatywy:
+
+- **Default interface method (C# 8 DIM)** — niemożliwe, ponieważ projekt targetuje `net48`, a DIM wymaga .NET Core 3.0+
+- **Osobny interfejs `IRawResponseWriter`** — `RequestDispatcher` musiałby rzutować w runtime (`if (writer is IRawResponseWriter raw)`), co dodaje złożoność bez realnej korzyści
+
+Przy 3 znanych implementacjach (ASP.NET Core, OWIN, test) breaking change jest akceptowalny. Wszystkie zostały zaktualizowane w ramach tego PR.

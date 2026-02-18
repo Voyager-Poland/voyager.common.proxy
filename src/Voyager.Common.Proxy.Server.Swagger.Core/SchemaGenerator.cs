@@ -183,7 +183,7 @@ public class SchemaGenerator
         return null;
     }
 
-    private SchemaDefinition GenerateComplexTypeSchema(Type type, bool nullable, HashSet<Type> visitedTypes)
+    private SchemaDefinition GenerateComplexTypeSchema(Type type, bool _, HashSet<Type> visitedTypes)
     {
         var schemaName = GetSchemaName(type);
 

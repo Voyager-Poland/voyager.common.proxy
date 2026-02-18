@@ -248,6 +248,13 @@ namespace Voyager.Common.Proxy.Client.Internal
             return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
+        /// <summary>
+        /// Checks whether the response has a JSON content type.
+        /// Missing Content-Type is treated as JSON for backward compatibility —
+        /// the proxy server always sets Content-Type explicitly, but third-party
+        /// servers or test stubs may omit it, and prior to this change all
+        /// responses were unconditionally deserialized as JSON.
+        /// </summary>
         private static bool IsJsonContentType(HttpResponseMessage response)
         {
             var mediaType = response.Content?.Headers?.ContentType?.MediaType;
