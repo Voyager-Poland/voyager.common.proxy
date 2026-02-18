@@ -128,7 +128,7 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
             tags = operation.Tags.ToList(),
             produces = new List<string> { "application/json" },
             consumes = new List<string> { "application/json" },
-            parameters = operation.Parameters.Select(p => ConvertToSwaggerParameter(p, schemaRegistry)).ToList(),
+            parameters = operation.Parameters.Select(p => ConvertToSwaggerParameter(p)).ToList(),
             responses = new Dictionary<string, Response>()
         };
 
@@ -146,7 +146,7 @@ public class ServiceProxyDocumentFilter<TService> : IDocumentFilter
         return swaggerOperation;
     }
 
-    private static Parameter ConvertToSwaggerParameter(ParameterDefinition parameter, SchemaRegistry schemaRegistry)
+    private static Parameter ConvertToSwaggerParameter(ParameterDefinition parameter)
     {
         var swaggerParam = new Parameter
         {
