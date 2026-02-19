@@ -32,7 +32,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 				throw new ArgumentNullException(nameof(services));
 			}
 
-			services.AddTransient<IProxyDiagnostics>(sp =>
+			services.AddSingleton<IProxyDiagnostics>(sp =>
 			{
 				var client = sp.GetRequiredService<TelemetryClient>();
 				return new ApplicationInsightsProxyDiagnostics(client);
@@ -73,7 +73,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 			var options = new ApplicationInsightsOptions();
 			configure(options);
 
-			services.AddTransient<IProxyDiagnostics>(sp =>
+			services.AddSingleton<IProxyDiagnostics>(sp =>
 			{
 				var client = sp.GetRequiredService<TelemetryClient>();
 				return new ApplicationInsightsProxyDiagnostics(client, options);
