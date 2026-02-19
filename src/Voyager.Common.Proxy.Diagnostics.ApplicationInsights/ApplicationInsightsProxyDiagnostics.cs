@@ -124,8 +124,10 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 				evt.Properties["MaxAttempts"] = e.MaxAttempts.ToString();
 				evt.Properties["DelayMs"] = e.Delay.TotalMilliseconds.ToString();
 				evt.Properties["WillRetry"] = e.WillRetry.ToString();
-				evt.Properties["ErrorType"] = e.ErrorType;
-				evt.Properties["ErrorMessage"] = e.ErrorMessage;
+				if (e.ErrorType != null)
+					evt.Properties["ErrorType"] = e.ErrorType;
+				if (e.ErrorMessage != null)
+					evt.Properties["ErrorMessage"] = e.ErrorMessage;
 
 				_telemetryClient.TrackEvent(evt);
 			}
