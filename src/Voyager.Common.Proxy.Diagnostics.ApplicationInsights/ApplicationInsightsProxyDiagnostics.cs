@@ -149,8 +149,8 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 
 				SetTraceContext(evt, null, null);
 				SetCloudRoleName(evt);
+				SetCommonProperties(evt.Properties, e.ServiceName, null, null, null, e.UserLogin, e.UnitId, e.UnitType, null);
 
-				evt.Properties["ServiceName"] = e.ServiceName;
 				evt.Properties["OldState"] = e.OldState;
 				evt.Properties["NewState"] = e.NewState;
 				evt.Properties["FailureCount"] = e.FailureCount.ToString();
@@ -159,12 +159,6 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 					evt.Properties["LastErrorType"] = e.LastErrorType;
 				if (e.LastErrorMessage != null)
 					evt.Properties["LastErrorMessage"] = e.LastErrorMessage;
-				if (e.UserLogin != null)
-					evt.Properties["UserLogin"] = e.UserLogin;
-				if (e.UnitId != null)
-					evt.Properties["UnitId"] = e.UnitId;
-				if (e.UnitType != null)
-					evt.Properties["UnitType"] = e.UnitType;
 
 				_telemetryClient.TrackEvent(evt);
 			}
@@ -216,7 +210,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 		private static void SetCommonProperties(
 			IDictionary<string, string> properties,
 			string serviceName,
-			string methodName,
+			string? methodName,
 			string? httpMethod,
 			string? url,
 			string? userLogin,
@@ -225,8 +219,8 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 			IReadOnlyDictionary<string, string>? customProperties)
 		{
 			properties["ServiceName"] = serviceName;
-			properties["MethodName"] = methodName;
-
+			if (methodName != null)
+				properties["MethodName"] = methodName;
 			if (httpMethod != null)
 				properties["HttpMethod"] = httpMethod;
 			if (url != null)
