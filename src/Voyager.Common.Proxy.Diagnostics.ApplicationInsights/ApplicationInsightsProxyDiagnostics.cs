@@ -46,21 +46,13 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 		{
 			try
 			{
-				var dependency = new DependencyTelemetry
-				{
-					Type = "VoyagerProxy",
-					Name = $"{e.HttpMethod} {e.Url}",
-					Target = e.ServiceName,
-					Data = $"{e.HttpMethod} {e.Url} [{e.ServiceName}.{e.MethodName}]",
-					Duration = e.Duration,
-					Timestamp = e.Timestamp,
-					ResultCode = e.StatusCode.ToString(),
-					Success = e.IsSuccess,
-				};
+				var dependency = CreateDependencyTelemetry(
+					e.ServiceName, e.MethodName, e.HttpMethod, e.Url,
+					e.Duration, e.Timestamp, e.IsSuccess,
+					e.TraceId, e.SpanId,
+					e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 
-				SetTraceContext(dependency, e.TraceId, e.SpanId);
-				SetCloudRoleName(dependency);
-				SetCommonProperties(dependency.Properties, e.ServiceName, e.MethodName, e.HttpMethod, e.Url, e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
+				dependency.ResultCode = e.StatusCode.ToString();
 
 				if (!e.IsSuccess)
 				{
@@ -98,20 +90,12 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 
 				_telemetryClient.TrackException(exception);
 
-				var dependency = new DependencyTelemetry
-				{
-					Type = "VoyagerProxy",
-					Name = $"{e.HttpMethod} {e.Url}",
-					Target = e.ServiceName,
-					Data = $"{e.HttpMethod} {e.Url} [{e.ServiceName}.{e.MethodName}]",
-					Duration = e.Duration,
-					Timestamp = e.Timestamp,
-					Success = false,
-				};
+				var dependency = CreateDependencyTelemetry(
+					e.ServiceName, e.MethodName, e.HttpMethod, e.Url,
+					e.Duration, e.Timestamp, false,
+					e.TraceId, e.SpanId,
+					e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 
-				SetTraceContext(dependency, e.TraceId, e.SpanId);
-				SetCloudRoleName(dependency);
-				SetCommonProperties(dependency.Properties, e.ServiceName, e.MethodName, e.HttpMethod, e.Url, e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 				dependency.Properties["ExceptionType"] = e.ExceptionType;
 				dependency.Properties["ExceptionMessage"] = e.ExceptionMessage;
 
@@ -186,6 +170,31 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 			{
 				// Diagnostics must never throw.
 			}
+		}
+
+		private DependencyTelemetry CreateDependencyTelemetry(
+			string serviceName, string methodName, string httpMethod, string url,
+			TimeSpan duration, DateTimeOffset timestamp, bool success,
+			string? traceId, string? spanId,
+			string? userLogin, string? unitId, string? unitType,
+			IReadOnlyDictionary<string, string>? customProperties)
+		{
+			var dependency = new DependencyTelemetry
+			{
+				Type = "VoyagerProxy",
+				Name = $"{httpMethod} {url}",
+				Target = serviceName,
+				Data = $"{httpMethod} {url} [{serviceName}.{methodName}]",
+				Duration = duration,
+				Timestamp = timestamp,
+				Success = success,
+			};
+
+			SetTraceContext(dependency, traceId, spanId);
+			SetCloudRoleName(dependency);
+			SetCommonProperties(dependency.Properties, serviceName, methodName, httpMethod, url, userLogin, unitId, unitType, customProperties);
+
+			return dependency;
 		}
 
 		private static void SetTraceContext(ITelemetry telemetry, string? traceId, string? spanId)
