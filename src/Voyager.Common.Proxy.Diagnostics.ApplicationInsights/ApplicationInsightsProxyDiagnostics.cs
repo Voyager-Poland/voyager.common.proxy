@@ -49,7 +49,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 				var dependency = CreateDependencyTelemetry(
 					e.ServiceName, e.MethodName, e.HttpMethod, e.Url,
 					e.Duration, e.Timestamp, e.IsSuccess,
-					e.TraceId, e.SpanId,
+					e.TraceId, e.SpanId, e.ParentSpanId,
 					e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 
 				dependency.ResultCode = e.StatusCode.ToString();
@@ -82,7 +82,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 					SeverityLevel = SeverityLevel.Error,
 				};
 
-				SetTraceContext(exception, e.TraceId, e.SpanId);
+				SetTraceContext(exception, e.TraceId, e.SpanId, e.ParentSpanId);
 				SetCloudRoleName(exception);
 				SetCommonProperties(exception.Properties, e.ServiceName, e.MethodName, e.HttpMethod, e.Url, e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 				exception.Properties["ExceptionType"] = e.ExceptionType;
@@ -93,7 +93,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 				var dependency = CreateDependencyTelemetry(
 					e.ServiceName, e.MethodName, e.HttpMethod, e.Url,
 					e.Duration, e.Timestamp, false,
-					e.TraceId, e.SpanId,
+					e.TraceId, e.SpanId, e.ParentSpanId,
 					e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 
 				dependency.Properties["ExceptionType"] = e.ExceptionType;
@@ -117,7 +117,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 					Timestamp = e.Timestamp,
 				};
 
-				SetTraceContext(evt, e.TraceId, e.SpanId);
+				SetTraceContext(evt, e.TraceId, e.SpanId, e.ParentSpanId);
 				SetCloudRoleName(evt);
 				SetCommonProperties(evt.Properties, e.ServiceName, e.MethodName, null, null, e.UserLogin, e.UnitId, e.UnitType, e.CustomProperties);
 				evt.Properties["AttemptNumber"] = e.AttemptNumber.ToString();
@@ -171,7 +171,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 		private DependencyTelemetry CreateDependencyTelemetry(
 			string serviceName, string methodName, string httpMethod, string url,
 			TimeSpan duration, DateTimeOffset timestamp, bool success,
-			string? traceId, string? spanId,
+			string? traceId, string? spanId, string? parentSpanId,
 			string? userLogin, string? unitId, string? unitType,
 			IReadOnlyDictionary<string, string>? customProperties)
 		{
@@ -186,18 +186,20 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights
 				Success = success,
 			};
 
-			SetTraceContext(dependency, traceId, spanId);
+			SetTraceContext(dependency, traceId, spanId, parentSpanId);
 			SetCloudRoleName(dependency);
 			SetCommonProperties(dependency.Properties, serviceName, methodName, httpMethod, url, userLogin, unitId, unitType, customProperties);
 
 			return dependency;
 		}
 
-		private static void SetTraceContext(ITelemetry telemetry, string? traceId, string? spanId)
+		private static void SetTraceContext(ITelemetry telemetry, string? traceId, string? spanId, string? parentSpanId = null)
 		{
 			if (!string.IsNullOrEmpty(traceId))
 				telemetry.Context.Operation.Id = traceId;
-			if (!string.IsNullOrEmpty(spanId))
+			if (!string.IsNullOrEmpty(parentSpanId))
+				telemetry.Context.Operation.ParentId = parentSpanId;
+			else if (!string.IsNullOrEmpty(spanId))
 				telemetry.Context.Operation.ParentId = spanId;
 		}
 

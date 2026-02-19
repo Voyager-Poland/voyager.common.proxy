@@ -63,6 +63,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 				MethodName = "GetById",
 				TraceId = "abc123def456789012345678901234ab",
 				SpanId = "1234567890abcdef",
+				ParentSpanId = "fedcba0987654321",
 				UserLogin = "admin",
 				UnitId = "U1",
 				UnitType = "Agent",
@@ -79,7 +80,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 			dep.Success.Should().BeTrue();
 			dep.Duration.Should().Be(TimeSpan.FromMilliseconds(150));
 			dep.Context.Operation.Id.Should().Be("abc123def456789012345678901234ab");
-			dep.Context.Operation.ParentId.Should().Be("1234567890abcdef");
+			dep.Context.Operation.ParentId.Should().Be("fedcba0987654321");
 			dep.Properties["ServiceName"].Should().Be("UserService");
 			dep.Properties["MethodName"].Should().Be("GetById");
 			dep.Properties["HttpMethod"].Should().Be("GET");
@@ -87,6 +88,28 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 			dep.Properties["UserLogin"].Should().Be("admin");
 			dep.Properties["UnitId"].Should().Be("U1");
 			dep.Properties["UnitType"].Should().Be("Agent");
+		}
+
+		[Fact]
+		public void OnRequestCompleted_WithoutParentSpanId_FallsBackToSpanId()
+		{
+			var e = new RequestCompletedEvent
+			{
+				HttpMethod = "GET",
+				Url = "/api/users/1",
+				StatusCode = 200,
+				Duration = TimeSpan.FromMilliseconds(50),
+				IsSuccess = true,
+				ServiceName = "UserService",
+				MethodName = "GetById",
+				TraceId = "t1",
+				SpanId = "s1",
+			};
+
+			_sut.OnRequestCompleted(e);
+
+			var dep = _sentTelemetry.OfType<DependencyTelemetry>().Single();
+			dep.Context.Operation.ParentId.Should().Be("s1");
 		}
 
 		[Fact]
