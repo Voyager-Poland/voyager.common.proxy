@@ -8,6 +8,7 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 	using Microsoft.ApplicationInsights.Channel;
 	using Microsoft.ApplicationInsights.DataContracts;
 	using Microsoft.ApplicationInsights.Extensibility;
+	using Microsoft.Extensions.DependencyInjection;
 	using Xunit;
 
 	public class ApplicationInsightsProxyDiagnosticsTests
@@ -285,7 +286,8 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 		[Fact]
 		public void CloudRoleName_WhenConfigured_SetsOnAllTelemetry()
 		{
-			var channel = new StubTelemetryChannel { OnSend = t => _sentTelemetry.Add(t) };
+			var sentTelemetry = new List<ITelemetry>();
+			var channel = new StubTelemetryChannel { OnSend = t => sentTelemetry.Add(t) };
 			var config = new TelemetryConfiguration { TelemetryChannel = channel };
 			var client = new TelemetryClient(config);
 			var options = new ApplicationInsightsOptions { CloudRoleName = "MyService-Prod" };
@@ -303,9 +305,88 @@ namespace Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests
 				SpanId = "s1",
 			});
 
-			// Find the telemetry sent by this specific sut (skip any from constructor _sut)
-			var dep = _sentTelemetry.OfType<DependencyTelemetry>().Last();
+			var dep = sentTelemetry.OfType<DependencyTelemetry>().Single();
 			dep.Context.Cloud.RoleName.Should().Be("MyService-Prod");
+		}
+
+		#endregion
+
+		#region DI Registration
+
+		[Fact]
+		public void AddProxyApplicationInsightsDiagnostics_ResolvesIProxyDiagnostics()
+		{
+			var services = new ServiceCollection();
+			services.AddSingleton(new TelemetryConfiguration { TelemetryChannel = new StubTelemetryChannel() });
+			services.AddSingleton(sp =>
+				new TelemetryClient(sp.GetRequiredService<TelemetryConfiguration>()));
+
+			services.AddProxyApplicationInsightsDiagnostics();
+
+			using var provider = services.BuildServiceProvider();
+			var diagnostics = provider.GetService<IProxyDiagnostics>();
+
+			diagnostics.Should().NotBeNull();
+			diagnostics.Should().BeOfType<ApplicationInsightsProxyDiagnostics>();
+		}
+
+		[Fact]
+		public void AddProxyApplicationInsightsDiagnostics_WithOptions_ResolvesWithCloudRoleName()
+		{
+			var services = new ServiceCollection();
+			var telemetry = new List<ITelemetry>();
+			var channel = new StubTelemetryChannel { OnSend = t => telemetry.Add(t) };
+			services.AddSingleton(new TelemetryConfiguration { TelemetryChannel = channel });
+			services.AddSingleton(sp =>
+				new TelemetryClient(sp.GetRequiredService<TelemetryConfiguration>()));
+
+			services.AddProxyApplicationInsightsDiagnostics(options =>
+			{
+				options.CloudRoleName = "TestRole";
+			});
+
+			using var provider = services.BuildServiceProvider();
+			var diagnostics = provider.GetRequiredService<IProxyDiagnostics>();
+
+			diagnostics.OnRequestCompleted(new RequestCompletedEvent
+			{
+				HttpMethod = "GET", Url = "/test", StatusCode = 200,
+				IsSuccess = true, ServiceName = "Svc", MethodName = "M",
+			});
+
+			var dep = telemetry.OfType<DependencyTelemetry>().Single();
+			dep.Context.Cloud.RoleName.Should().Be("TestRole");
+		}
+
+		#endregion
+
+		#region CustomProperties collision
+
+		[Fact]
+		public void CustomProperties_OverwritesCommonProperty_WhenKeyCollides()
+		{
+			var e = new RequestCompletedEvent
+			{
+				HttpMethod = "GET",
+				Url = "/api/test",
+				StatusCode = 200,
+				Duration = TimeSpan.FromMilliseconds(50),
+				IsSuccess = true,
+				ServiceName = "OriginalService",
+				MethodName = "GetData",
+				TraceId = "t1",
+				SpanId = "s1",
+				CustomProperties = new Dictionary<string, string>
+				{
+					["ServiceName"] = "OverriddenService",
+				},
+			};
+
+			_sut.OnRequestCompleted(e);
+
+			var dep = _sentTelemetry.OfType<DependencyTelemetry>().Single();
+			// CustomProperties are applied after common properties, so they overwrite
+			dep.Properties["ServiceName"].Should().Be("OverriddenService");
 		}
 
 		#endregion
