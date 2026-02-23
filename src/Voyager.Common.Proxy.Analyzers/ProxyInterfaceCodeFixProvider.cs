@@ -93,7 +93,7 @@ namespace Voyager.Common.Proxy.Analyzers
 				var httpPostAttr = SyntaxFactory.Attribute(SyntaxFactory.IdentifierName("HttpPost"));
 				var attrList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(httpPostAttr))
 					.WithLeadingTrivia(leadingTrivia)
-					.WithTrailingTrivia(SyntaxFactory.EndOfLine("\n"));
+					.WithTrailingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);
 				var newMethod = methodDeclaration
 					.WithLeadingTrivia(leadingTrivia)
 					.WithAttributeLists(methodDeclaration.AttributeLists.Add(attrList));
