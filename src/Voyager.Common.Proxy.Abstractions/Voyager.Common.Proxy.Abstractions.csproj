@@ -21,4 +21,10 @@
 		<PackageReference Include="Voyager.Common.Results" Version="1.9.0" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\Voyager.Common.Proxy.Analyzers\Voyager.Common.Proxy.Analyzers.csproj"
+						  OutputItemType="Analyzer"
+						  ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
 </Project>
