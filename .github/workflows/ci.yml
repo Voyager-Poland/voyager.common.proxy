@@ -83,9 +83,16 @@ jobs:
     - name: Test Diagnostics.ApplicationInsights (net8.0)
       run: dotnet test tests/Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests/Voyager.Common.Proxy.Diagnostics.ApplicationInsights.Tests.csproj --no-build --verbosity normal -c Release --framework net8.0
 
+    # Analyzers Tests
+    - name: Test Analyzers (net8.0)
+      run: dotnet test tests/Voyager.Common.Proxy.Analyzers.Tests/Voyager.Common.Proxy.Analyzers.Tests.csproj --no-build --verbosity normal -c Release --framework net8.0
+
     # Pack all NuGet packages
     - name: Pack Voyager.Common.Proxy.Abstractions
       run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Abstractions/Voyager.Common.Proxy.Abstractions.csproj
+
+    - name: Pack Voyager.Common.Proxy.Analyzers
+      run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Analyzers/Voyager.Common.Proxy.Analyzers.csproj
 
     - name: Pack Voyager.Common.Proxy.Client
       run: dotnet pack --no-restore --no-build -c Release ${{ github.workspace }}/src/Voyager.Common.Proxy.Client/Voyager.Common.Proxy.Client.csproj
