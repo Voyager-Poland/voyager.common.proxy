@@ -17,6 +17,7 @@ namespace Voyager.Common.Proxy.Analyzers
 			category: "Voyager.Proxy.Usage",
 			defaultSeverity: DiagnosticSeverity.Error,
 			isEnabledByDefault: true,
-			description: "Arrays and collections of simple types (int[], List<string>, etc.) cannot be serialized as query string parameters on GET/DELETE requests. The values will be silently lost at runtime. Use [HttpPost] with a request body instead.");
+			description: "Arrays and collections of simple types (int[], List<string>, etc.) cannot be serialized as query string parameters on GET/DELETE requests. The values will be silently lost at runtime. Use [HttpPost] with a request body instead.",
+			helpLinkUri: "https://github.com/Voyager-Poland/voyager.common.proxy/blob/main/docs/analyzers/VP0001.md");
 	}
 }

@@ -1,6 +1,6 @@
 # ADR-015: Obsługa tablic i kolekcji jako parametrów query string
 
-**Status:** Proponowany
+**Status:** Etap 1 zaimplementowany (VP0001 analizator + CodeFix)
 **Data:** 2026-02-23
 
 ## Problem

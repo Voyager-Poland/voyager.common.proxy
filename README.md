@@ -39,6 +39,7 @@ Both sides use the same interface contract and routing conventions, ensuring con
 | Package | Description | Targets |
 |---------|-------------|---------|
 | [`Voyager.Common.Proxy.Abstractions`](#abstractions) | HTTP routing attributes (optional) | net48, net6.0, net8.0 |
+| [`Voyager.Common.Proxy.Analyzers`](#analyzers) | Roslyn analyzers for interface validation | netstandard2.0 |
 | [`Voyager.Common.Proxy.Client`](#client) | HTTP client proxy generation | net48, net6.0, net8.0 |
 | [`Voyager.Common.Proxy.Diagnostics`](#diagnostics) | Logging diagnostics handler | net48, net6.0, net8.0 |
 | [`Voyager.Common.Proxy.Server.AspNetCore`](#server-aspnet-core) | ASP.NET Core endpoint generation | net6.0, net8.0 |
@@ -346,6 +347,25 @@ Zero-dependency package providing optional attributes:
 - `[AllowAnonymous]` - Allow anonymous access (override interface-level auth)
 - `[ProducesContentType("text/html")]` - Custom response content type (server-side only)
 
+### Analyzers
+
+Roslyn analyzers delivered automatically via the `Abstractions` package — no extra configuration needed. Any project referencing `Voyager.Common.Proxy.Abstractions` gets compile-time validation of proxy interfaces.
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| VP0001 | Error | Array/collection of simple types on GET/DELETE causes silent data loss. Use `[HttpPost]` instead. |
+
+The analyzer detects issues in your IDE (red squiggle) and during `dotnet build`. A **Quick Fix** is available to automatically change the HTTP method to POST:
+
+```csharp
+[HttpGet("get-invoice-data")]
+Task<Result<InvoiceData>> GetInvoiceDataAsync(int[] idTickets);
+//                                                  ~~~~~~~~~~
+// VP0001: Parameter 'idTickets' of type 'int[]' is not supported
+//         for GET requests. Use [HttpPost] or change to a simple type.
+//         [Quick fix: Change to HttpPost]
+```
+
 ### Client
 
 ```bash
@@ -485,6 +505,7 @@ public interface IOrderService
 voyager.common.proxy/
 ├── src/
 │   ├── Voyager.Common.Proxy.Abstractions/     # HTTP attributes, diagnostic interfaces
+│   ├── Voyager.Common.Proxy.Analyzers/        # Roslyn analyzers (VP0001+)
 │   ├── Voyager.Common.Proxy.Client/           # Client proxy
 │   ├── Voyager.Common.Proxy.Diagnostics/      # Logging & console diagnostics handlers
 │   ├── Voyager.Common.Proxy.Server.Abstractions/  # Server contracts
@@ -492,6 +513,7 @@ voyager.common.proxy/
 │   ├── Voyager.Common.Proxy.Server.AspNetCore/    # ASP.NET Core integration
 │   └── Voyager.Common.Proxy.Server.Owin/      # OWIN integration
 ├── tests/
+│   ├── Voyager.Common.Proxy.Analyzers.Tests/
 │   ├── Voyager.Common.Proxy.Client.Tests/
 │   ├── Voyager.Common.Proxy.Client.IntegrationTests/
 │   ├── Voyager.Common.Proxy.Diagnostics.Tests/
