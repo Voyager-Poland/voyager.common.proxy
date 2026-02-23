@@ -1024,7 +1024,7 @@ internal sealed class HttpMethodInterceptor : IMethodInterceptor
 
 ### Faza 4: Zewnętrzne pakiety (opcjonalne, przyszłość)
 
-- [ ] `Voyager.Common.Proxy.Diagnostics.ApplicationInsights`
+- [x] `Voyager.Common.Proxy.Diagnostics.ApplicationInsights` (ADR-014)
 - [ ] `Voyager.Common.Proxy.Diagnostics.OpenTelemetry`
 - [ ] Przykłady integracji
 

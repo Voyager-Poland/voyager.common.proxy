@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-02-19
+
+### Added
+
+- **Application Insights diagnostics package** (`Voyager.Common.Proxy.Diagnostics.ApplicationInsights`):
+  - New `IProxyDiagnostics` implementation that sends proxy events to Azure Application Insights
+  - `OnRequestCompleted` → `DependencyTelemetry` (type `VoyagerProxy`)
+  - `OnRequestFailed` → `ExceptionTelemetry` + failed `DependencyTelemetry`
+  - `OnRetryAttempt` → `EventTelemetry` (`ProxyRetryAttempt`)
+  - `OnCircuitBreakerStateChanged` → `EventTelemetry` (`ProxyCircuitBreakerStateChanged`)
+  - W3C Trace Context correlation (`operation_Id`, `operation_ParentId`) with `ParentSpanId` support
+  - Configurable `CloudRoleName` for Application Map separation
+  - DI extensions: `services.AddProxyApplicationInsightsDiagnostics()`
+  - All handler methods wrapped in try/catch — diagnostics never affects proxy logic
+  - See [ADR-014](docs/adr/ADR-014-ApplicationInsights-Diagnostics.md) for design rationale
+
+### Changed
+
+- **NuGet package updates**:
+  - `Voyager.Common.Results` 1.8.0 → 1.9.0 (Abstractions, Server.Core, Client)
+  - `Voyager.Common.Resilience` 1.8.0 → 1.9.0 (Client)
+
 ## [1.8.0] - 2026-02-18
 
 ### Added
