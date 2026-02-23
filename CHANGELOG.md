@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-02-23
+
+### Added
+
+- **Roslyn analyzer package** (`Voyager.Common.Proxy.Analyzers`):
+  - New `VP0001` diagnostic (Error): detects array/collection of simple types (`int[]`, `List<string>`, `IEnumerable<Guid>`, etc.) used as parameters on GET or DELETE proxy interface methods — a pattern that causes silent data loss at runtime
+  - Supports both attribute-based (`[HttpGet]`, `[HttpDelete]`) and convention-based (method name prefixes: `Get*`, `Find*`, `List*`, `Search*`, `Delete*`, `Remove*`) HTTP method detection
+  - Recognizes proxy service interfaces by `[ServiceRoute]` attribute or presence of any `[HttpMethod]` derivative on methods
+  - Code Fix: **Change to [HttpPost]** — replaces `[HttpGet]`/`[HttpDelete]` with `[HttpPost]` (preserving route template), or adds `[HttpPost]` for convention-based methods
+  - Automatically delivered via `Voyager.Common.Proxy.Abstractions` — any project referencing Abstractions gets the analyzer with zero configuration
+  - 28 tests: 14 positive (diagnostic expected), 10 negative (no diagnostic), 4 code fix scenarios
+  - See [ADR-015](docs/adr/ADR-015-Array-Collection-Query-Parameter-Support.md) for design rationale (Etap 1)
+
 ## [1.9.0] - 2026-02-19
 
 ### Added
