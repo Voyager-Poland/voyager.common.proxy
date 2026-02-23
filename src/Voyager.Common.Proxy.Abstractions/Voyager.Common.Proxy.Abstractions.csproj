@@ -21,10 +21,20 @@
 		<PackageReference Include="Voyager.Common.Results" Version="1.9.0" />
 	</ItemGroup>
 
+	<!-- Ensure analyzer project builds before packing (no runtime reference) -->
 	<ItemGroup>
 		<ProjectReference Include="..\Voyager.Common.Proxy.Analyzers\Voyager.Common.Proxy.Analyzers.csproj"
 						  OutputItemType="Analyzer"
-						  ReferenceOutputAssembly="false" />
+						  ReferenceOutputAssembly="false"
+						  PrivateAssets="All" />
+	</ItemGroup>
+
+	<!-- Include Roslyn Analyzer in NuGet package -->
+	<ItemGroup>
+		<None Include="$(MSBuildThisFileDirectory)..\Voyager.Common.Proxy.Analyzers\bin\$(Configuration)\netstandard2.0\Voyager.Common.Proxy.Analyzers.dll"
+			  Pack="true"
+			  PackagePath="analyzers/dotnet/cs"
+			  Visible="false" />
 	</ItemGroup>
 
 </Project>
