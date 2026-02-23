@@ -284,6 +284,40 @@ public interface ITestService
 					.WithLocation(0).WithArguments("ids", "int[]", "GET"));
 		}
 
+		[Fact]
+		public async Task HttpMethodAttribute_Get_WithIntArray_ReportsDiagnostic()
+		{
+			var source = Source(@"
+[ServiceRoute(""test"")]
+public interface ITestService
+{
+	[HttpMethod(HttpMethod.Get, ""items"")]
+	Task GetItemsAsync(int[] {|#0:ids|});
+}
+");
+			await AnalyzerVerifier.VerifyAnalyzerAsync(source,
+				AnalyzerVerifier.Diagnostic(DiagnosticDescriptors.CollectionParameterOnGetOrDelete)
+					.WithLocation(0).WithArguments("ids", "int[]", "GET"));
+		}
+
+		[Fact]
+		public async Task HttpGet_WithListOfEnum_ReportsDiagnostic()
+		{
+			var source = Source(@"
+public enum Status { Active, Inactive }
+
+[ServiceRoute(""test"")]
+public interface ITestService
+{
+	[HttpGet]
+	Task GetByStatusAsync(List<Status> {|#0:statuses|});
+}
+");
+			await AnalyzerVerifier.VerifyAnalyzerAsync(source,
+				AnalyzerVerifier.Diagnostic(DiagnosticDescriptors.CollectionParameterOnGetOrDelete)
+					.WithLocation(0).WithArguments("statuses", "List<Status>", "GET"));
+		}
+
 		#endregion
 
 		#region Negative — no diagnostic expected
