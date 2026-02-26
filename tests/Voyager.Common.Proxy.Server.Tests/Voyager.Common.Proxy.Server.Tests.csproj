@@ -34,6 +34,10 @@
     <ProjectReference Include="..\..\src\Voyager.Common.Proxy.Server.Core\Voyager.Common.Proxy.Server.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <ProjectReference Include="..\..\src\Voyager.Common.Proxy.Server.Owin\Voyager.Common.Proxy.Server.Owin.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

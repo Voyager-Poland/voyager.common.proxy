@@ -66,10 +66,11 @@ internal sealed class RouteMatcher
         pattern = "^" + Regex.Escape(pattern).Replace("\\(\\[\\^/\\]\\+\\)", "([^/]+)") + "$";
 
         // Fix the double escaping issue - rebuild properly
+        // Trailing slash is optional (/?$) to match both /path and /path/
         pattern = "^" + Regex.Replace(
             routeTemplate,
             @"\{(\w+)(?::[^}]+)?\}",
-            _ => "([^/]+)") + "$";
+            _ => "([^/]+)") + "/?$";
 
         parameterNames = paramList.ToArray();
         return pattern;

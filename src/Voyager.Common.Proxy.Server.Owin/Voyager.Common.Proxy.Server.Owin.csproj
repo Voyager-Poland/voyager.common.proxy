@@ -16,6 +16,10 @@
   <!-- IDictionary<string,object> environment and Func<..., Task> are framework types -->
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Voyager.Common.Proxy.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Voyager.Common.Proxy.Server.Abstractions\Voyager.Common.Proxy.Server.Abstractions.csproj" />
     <ProjectReference Include="..\Voyager.Common.Proxy.Server.Core\Voyager.Common.Proxy.Server.Core.csproj" />
   </ItemGroup>

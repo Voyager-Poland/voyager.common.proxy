@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Trailing slash normalization** (Server.Owin):
+  - Requests with trailing slash (e.g., `POST /api/Vip/Contact/`) now correctly match endpoints registered without trailing slash (`/api/Vip/Contact`)
+  - Previously returned 404 — a regression compared to standard ASP.NET Core controller routing which normalizes trailing slashes automatically
+  - Fix: `RouteMatcher` regex anchor changed from `$` to `/?$` (optional trailing slash)
+  - See [ADR-017](docs/adr/ADR-017-Trailing-Slash-Normalization.md) for design rationale
+
 ## [1.10.0] - 2026-02-23
 
 ### Added
