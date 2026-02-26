@@ -256,3 +256,16 @@ dotnet_naming_style.begins_with_underscore.required_prefix = _
 dotnet_naming_style.begins_with_underscore.required_suffix =
 dotnet_naming_style.begins_with_underscore.word_separator =
 dotnet_naming_style.begins_with_underscore.capitalization = camel_case
+
+
+dotnet_diagnostic.VCR0010.severity = error
+dotnet_diagnostic.VCR0020.severity = error
+dotnet_diagnostic.VCR0030.severity = error
+dotnet_diagnostic.VCR0050.severity = error
+dotnet_diagnostic.VCR0060.severity = error
+dotnet_diagnostic.VCR0070.severity = error
+dotnet_diagnostic.VCR0071.severity = error
+
+# Test projects — allow patterns that are intentionally tested
+[tests/**/*.cs]
+dotnet_diagnostic.VCR0070.severity = none
